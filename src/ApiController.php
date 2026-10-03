@@ -5,6 +5,8 @@ use PlusChat\Auth\Auth;
 use PlusChat\Http\Request;
 use PlusChat\Http\Response;
 final class ApiController{
+ public function sessionList(Request $r):Response{$u=$this->u($r);$s=Database::pdo()->prepare('SELECT id,device_name,ip,user_agent,created_at,last_seen_at,expires_at FROM sessions WHERE user_id=? ORDER BY created_at DESC');$s->execute([$u['id']]);return Response::json(['sessions'=>$s->fetchAll()]);}
+ public function sessionRevoke(Request $r):Response{$u=$this->u($r);Database::pdo()->prepare('UPDATE sessions SET revoked_at=NOW() WHERE id=? AND user_id=?')->execute([(int)$r->json()['session_id'],$u['id']]);return Response::json(['ok'=>true]);}
  private function u(Request $r):array{return Auth::require($r);}
  private function member(int $chat,int $user):?string{$s=Database::pdo()->prepare('SELECT role FROM chat_members WHERE chat_id=? AND user_id=?');$s->execute([$chat,$user]);$v=$s->fetchColumn();return $v===false?null:(string)$v;}
  public function me(Request $r):Response{$u=$this->u($r);unset($u['password_hash']);return Response::json(['user'=>$u]);}
