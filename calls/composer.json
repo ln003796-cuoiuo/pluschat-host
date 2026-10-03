@@ -1,4 +1,0 @@
-{
-  "require":{"php":">=8.3","ext-pdo":"*","ext-sodium":"*","cboden/ratchet":"^0.4.4"},
-  "autoload":{"psr-4":{"PlusChat\\Calls\\":"src/"}}
-}
