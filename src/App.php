@@ -4,7 +4,7 @@ namespace PlusChat;
 use PlusChat\Http\Request;use PlusChat\Http\Response;use PlusChat\Http\Router;use PlusChat\Security\Security;use PlusChat\Auth\AuthController;use PlusChat\Auth\PasswordController;use PlusChat\Profile\ProfileController;
 final class App{
  private Router $router;
- public function __construct(private string $base){Security::headers();$this->router=new Router();$a=new AuthController();$pw=new PasswordController();$pr=new ProfileController();$api=new ApiController();$f=new FeatureController();$files=new FileController();$admin=new AdminController();$topic=new TopicController();
+ public function __construct(private string $base){Security::headers();$this->router=new Router();$a=new AuthController();$pw=new PasswordController();$pr=new ProfileController();$api=new ApiController();$f=new FeatureController();$files=new FileController();$admin=new AdminController();$topic=new TopicController();$calls=new CallTokenController();
   $this->router->get('/api/v1/health',fn()=>Response::json(['ok'=>true,'service'=>'pluschat','version'=>'1']));
   $this->router->post('/api/v1/auth/register',[$a,'register']);$this->router->post('/api/v1/auth/verify-email',[$a,'verifyEmail']);$this->router->post('/api/v1/auth/login',[$a,'login']);$this->router->post('/api/v1/auth/password/request',[$pw,'requestReset']);$this->router->post('/api/v1/auth/password/reset',[$pw,'reset']);
   $this->router->post('/api/v1/profile/complete',[$pr,'complete']);$this->router->get('/api/v1/me',[$api,'me']);$this->router->post('/api/v1/auth/logout',[$api,'logout']);$this->router->post('/api/v1/auth/logout-all',[$api,'logoutAll']);
