@@ -19,6 +19,6 @@ try{
 "CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id,expires_at)",
 "CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id,created_at DESC)"
  ];
- foreach($sql as $s)$db->exec($s);
+ foreach($sql as $s)$db->exec($s);$db->exec("ALTER TABLE topics ADD COLUMN IF NOT EXISTS pinned BOOLEAN NOT NULL DEFAULT FALSE");$db->exec("ALTER TABLE topics ADD COLUMN IF NOT EXISTS converted_chat_id BIGINT");$db->exec("ALTER TABLE messages ADD COLUMN IF NOT EXISTS forwarded_from_id BIGINT");$db->exec("ALTER TABLE messages ADD COLUMN IF NOT EXISTS pinned BOOLEAN NOT NULL DEFAULT FALSE");$db->exec("ALTER TABLE sessions ADD COLUMN IF NOT EXISTS device_name VARCHAR(120)");$db->exec("ALTER TABLE sessions ADD COLUMN IF NOT EXISTS ip INET");$db->exec("ALTER TABLE sessions ADD COLUMN IF NOT EXISTS user_agent TEXT");$db->exec("ALTER TABLE sessions ADD COLUMN IF NOT EXISTS last_seen_at TIMESTAMPTZ");
  echo 'PlusChat schema upgrade OK';
 }catch(Throwable $e){http_response_code(500);echo 'Upgrade failed';}
