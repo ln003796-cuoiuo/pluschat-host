@@ -1,0 +1,7 @@
+<?php
+declare(strict_types=1);
+namespace PlusChat;
+use PlusChat\Auth\Auth;use PlusChat\Http\Request;use PlusChat\Http\Response;
+final class TopicController{
+ public function convert(Request $r):Response{$u=Auth::user($r);if(!$u)return Response::json(['error'=>'unauthorized'],401);$b=$r->json();$p=Database::pdo();$s=$p->prepare('SELECT t.*,c.created_by FROM topics t JOIN chats c ON c.id=t.chat_id WHERE t.id=:t');$s->execute(['t'=>(int)$b['topic_id']]);$t=$s->fetch();if(!$t)return Response::json(['error'=>'not_found'],404);$s=$p->prepare('SELECT role FROM chat_members WHERE chat_id=:c AND user_id=:u');$s->execute(['c'=>$t['chat_id'],'u'=>$u['id']]);if(!in_array($s->fetchColumn(),['owner','admin'],true))return Response::json(['error'=>'forbidden'],403);$p->beginTransaction();$p->prepare('INSERT INTO chats(type,title,created_by) VALUES(\'channel\',:title,:u)')->execute(['title'=>$t['name'],'u'=>$u['id']]);$new=(int)$p->query("SELECT currval(pg_get_serial_sequence('chats','id'))")->fetchColumn();$p->prepare('INSERT INTO channels(chat_id,is_public,description) VALUES(:c,FALSE,:d)')->execute(['c'=>$new,'d'=>'Канал из темы PlusChat']);$p->prepare('INSERT INTO chat_members(chat_id,user_id,role) VALUES(:c,:u,\'owner\')')->execute(['c'=>$new,'u'=>$u['id']]);$p->prepare('UPDATE messages SET chat_id=:new WHERE chat_id=:old')->execute(['new'=>$new,'old'=>$t['chat_id']]);$p->prepare('UPDATE topics SET archived=TRUE WHERE id=:t')->execute(['t'=>$t['id']]);$p->commit();return Response::json(['ok'=>true,'channel_chat_id'=>$new]);}
+}
