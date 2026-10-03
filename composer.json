@@ -1,0 +1,6 @@
+{
+  "name":"pluschat/server",
+  "type":"project",
+  "require":{"php":"^8.3","ext-pdo":"*","ext-sodium":"*","phpmailer/phpmailer":"^6.9"},
+  "autoload":{"psr-4":{"PlusChat\\":"src/"}}
+}
