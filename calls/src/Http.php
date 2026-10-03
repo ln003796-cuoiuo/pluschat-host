@@ -1,0 +1,16 @@
+<?php
+declare(strict_types=1);
+namespace PlusChat\Calls;
+final class Http{
+ private static function json(array $x,int $s=200):never{http_response_code($s);header('Content-Type: application/json; charset=utf-8');header('Cache-Control: no-store');header('X-Content-Type-Options: nosniff');echo json_encode($x,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);exit;}
+ private static function body():array{$x=json_decode(file_get_contents('php://input')?:'{}',true);return is_array($x)?$x:[];}
+ private static function auth():array{$h=$_SERVER['HTTP_AUTHORIZATION']??'';if(!preg_match('/^Bearer\\s+(.+)$/i',$h,$m))self::json(['error'=>'unauthorized'],401);$p=Token::verify($m[1]);if(!$p)self::json(['error'=>'invalid_token'],401);return $p;}
+ public static function run():never{$method=$_SERVER['REQUEST_METHOD']??'GET';$path=parse_url($_SERVER['REQUEST_URI']??'/',PHP_URL_PATH)?:'/';if($path==='/health')self::json(['ok'=>true,'service'=>'pluschat-calls']);$u=self::auth();
+  if($method==='POST'&&$path==='/api/calls'){ $b=self::body();$kind=$b['kind']??'audio';if(!in_array($kind,['audio','video'],true))self::json(['error'=>'invalid_kind'],422);$max=(int)(getenv('CALL_MAX_DURATION')?:7200);$ttl=min(max((int)($b['ttl']??3600),60),$max);$id=bin2hex(random_bytes(16));$p=Db::p();$p->prepare('INSERT INTO calls(id,creator_id,kind,status,expires_at) VALUES(:id,:u,:k,\'ringing\',NOW()+(:ttl * INTERVAL \'1 second\'))')->execute(['id'=>$id,'u'=>(int)$u['uid'],'k'=>$kind,'ttl'=>$ttl]);$p->prepare('INSERT INTO participants(call_id,user_id,role) VALUES(:c,:u,\'creator\')')->execute(['c'=>$id,'u'=>(int)$u['uid']]);self::json(['call_id'=>$id,'kind'=>$kind,'status'=>'ringing','expires_in'=>$ttl],201);}
+  if($method==='POST'&&preg_match('#^/api/calls/([a-f0-9]+)/join$#',$path,$m)){ $b=self::body();$id=$m[1];$p=Db::p();$st=$p->prepare('SELECT id,status,kind,expires_at FROM calls WHERE id=:id AND expires_at>NOW() AND status NOT IN (\'ended\',\'expired\')');$st->execute(['id'=>$id]);$c=$st->fetch();if(!$c)self::json(['error'=>'call_unavailable'],404);$p->prepare('INSERT INTO participants(call_id,user_id,role) VALUES(:c,:u,\'participant\') ON CONFLICT(call_id,user_id) DO UPDATE SET left_at=NULL')->execute(['c'=>$id,'u'=>(int)$u['uid']]);self::json(['call'=>$c]);}
+  if($method==='POST'&&preg_match('#^/api/calls/([a-f0-9]+)/end$#',$path,$m)){ $p=Db::p();$st=$p->prepare('SELECT creator_id FROM calls WHERE id=:id');$st->execute(['id'=>$m[1]]);$c=$st->fetch();if(!$c)self::json(['error'=>'not_found'],404);if((int)$c['creator_id']!==(int)$u['uid'])self::json(['error'=>'forbidden'],403);$p->prepare('UPDATE calls SET status=\'ended\',ended_at=NOW() WHERE id=:id AND status<>\'ended\'')->execute(['id'=>$m[1]]);self::json(['ok'=>true]);}
+  if($method==='GET'&&preg_match('#^/api/calls/([a-f0-9]+)/participants$#',$path,$m)){ $p=Db::p();$st=$p->prepare('SELECT user_id,role,joined_at,left_at FROM participants WHERE call_id=:id AND left_at IS NULL ORDER BY joined_at');$st->execute(['id'=>$m[1]]);self::json(['participants'=>$st->fetchAll()]);}
+  if($method==='POST'&&preg_match('#^/api/calls/([a-f0-9]+)/leave$#',$path,$m)){Db::p()->prepare('UPDATE participants SET left_at=NOW() WHERE call_id=:c AND user_id=:u AND left_at IS NULL')->execute(['c'=>$m[1],'u'=>(int)$u['uid']]);self::json(['ok'=>true]);}
+  self::json(['error'=>'not_found'],404);
+ }
+}
