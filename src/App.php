@@ -11,7 +11,7 @@ final class App{
   $this->router->get('/api/v1/me',[$api,'me']);$this->router->post('/api/v1/auth/logout',[$api,'logout']);$this->router->post('/api/v1/auth/logout-all',[$api,'logoutAll']);
   $this->router->get('/api/v1/users/search',[$api,'users']);$this->router->get('/api/v1/chats',[$api,'chats']);$this->router->post('/api/v1/chats',[$api,'chatCreate']);$this->router->post('/api/v1/chats/members',[$api,'membersAdd']);
   $this->router->get('/api/v1/messages',[$api,'messages']);$this->router->post('/api/v1/messages',[$api,'messageSend']);$this->router->post('/api/v1/messages/edit',[$api,'messageEdit']);$this->router->post('/api/v1/messages/delete',[$api,'messageDelete']);$this->router->post('/api/v1/messages/reaction',[$api,'reaction']);
-  $this->router->get('/api/v1/settings',[$api,'settings']);$this->router->post('/api/v1/settings',[$api,'settings']);$this->router->post('/api/v1/calls/token',[$api,'callToken']);
+  $this->router->get('/api/v1/settings',[$api,'settings']);$this->router->post('/api/v1/settings',[$api,'settings']);
   $this->router->get('/api/v1/topics',[$features,'topics']);$this->router->post('/api/v1/topics',[$features,'topics']);$this->router->post('/api/v1/topics/update',[$features,'topicUpdate']);
   $this->router->get('/api/v1/contacts',[$features,'contacts']);$this->router->post('/api/v1/contacts',[$features,'contacts']);$this->router->post('/api/v1/blocks',[$features,'block']);$this->router->post('/api/v1/reports',[$features,'report']);
   $this->router->get('/api/v1/notifications',[$features,'notifications']);$this->router->post('/api/v1/notifications/read',[$features,'notifications']);$this->router->get('/api/v1/search/messages',[$features,'search']);
