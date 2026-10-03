@@ -18,3 +18,6 @@ CREATE TABLE IF NOT EXISTS app_errors(id BIGSERIAL PRIMARY KEY,request_id VARCHA
 CREATE INDEX IF NOT EXISTS idx_security_events_user ON security_events(user_id,created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id,created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_reports_open ON reports(resolved_at,created_at);
+
+ALTER TABLE users ADD COLUMN IF NOT EXISTS admin_role VARCHAR(32) NOT NULL DEFAULT 'user';
+CREATE INDEX IF NOT EXISTS idx_users_admin_role ON users(admin_role);
