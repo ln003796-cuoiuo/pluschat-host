@@ -55,6 +55,7 @@ CREATE TABLE IF NOT EXISTS chats (
 CREATE TABLE IF NOT EXISTS chat_members (
   chat_id BIGINT UNSIGNED NOT NULL,
   user_id BIGINT UNSIGNED NOT NULL,
+  role VARCHAR(20) NOT NULL DEFAULT 'member',
   joined_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (chat_id, user_id),
   KEY idx_chat_members_user (user_id),
