@@ -4,6 +4,7 @@ declare(strict_types=1);
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store');
 header('X-Content-Type-Options: nosniff');
+date_default_timezone_set('UTC');
 
 function respond(int $status, array $body): never {
     http_response_code($status);
@@ -13,6 +14,16 @@ function respond(int $status, array $body): never {
 function fail(int $status, string $code, string $message): never {
     respond($status, ['error' => ['code' => $code, 'message' => $message]]);
 }
+set_exception_handler(static function (Throwable $e): void {
+    error_log('Pluschat API uncaught exception: ' . $e->getMessage());
+    if (!headers_sent()) {
+        http_response_code(500);
+        header('Content-Type: application/json; charset=utf-8');
+        header('Cache-Control: no-store');
+    }
+    echo json_encode(['error'=>['code'=>'internal_error','message'=>'Внутренняя ошибка шлюза.']], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    exit;
+});
 function input(): array {
     $raw = file_get_contents('php://input');
     if (!$raw) return [];
@@ -119,6 +130,9 @@ if ($method === 'GET' && $route === 'health') respond(200, ['ok'=>true, 'service
 if ($method === 'POST' && $route === 'auth/registration/start') {
     $phone = preg_replace('/[^+0-9]/', '', trim((string)($data['phone'] ?? '')));
     if (strlen($phone) < 8 || strlen($phone) > 16 || !str_starts_with($phone, '+')) fail(422, 'invalid_phone', 'Укажи номер в международном формате, например +79991234567.');
+    $rate = $db->prepare("SELECT COUNT(*) FROM auth_challenges WHERE kind='phone' AND destination=? AND created_at>DATE_SUB(UTC_TIMESTAMP(), INTERVAL 1 HOUR)");
+    $rate->execute([$phone]);
+    if ((int)$rate->fetchColumn() >= 3) fail(429, 'too_many_requests', 'Слишком много запросов кода. Попробуй позже.');
     $challenge = new_challenge($db, 'phone', $phone);
     if (!send_sms_code($config, $phone, $challenge['code'])) {
         $db->prepare('DELETE FROM auth_challenges WHERE id=?')->execute([$challenge['challenge_id']]);
@@ -140,6 +154,9 @@ if ($method === 'POST' && $route === 'auth/registration/email/start') {
     }
     $email = strtolower(trim((string)($data['email'] ?? '')));
     if (!filter_var($email, FILTER_VALIDATE_EMAIL)) fail(422, 'invalid_email', 'Укажи корректный email.');
+    $rate = $db->prepare("SELECT COUNT(*) FROM auth_challenges WHERE kind='email' AND destination=? AND created_at>DATE_SUB(UTC_TIMESTAMP(), INTERVAL 1 HOUR)");
+    $rate->execute([$email]);
+    if ((int)$rate->fetchColumn() >= 3) fail(429, 'too_many_requests', 'Слишком много запросов кода на этот адрес. Попробуй позже.');
     $q = $db->prepare('SELECT id FROM users WHERE email=?'); $q->execute([$email]);
     if ($q->fetchColumn()) fail(409, 'email_exists', 'Этот email уже зарегистрирован.');
     $challenge = new_challenge($db, 'email', $email, $parent);
