@@ -4,7 +4,38 @@ declare(strict_types=1);
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store');
 header('X-Content-Type-Options: nosniff');
+header('Referrer-Policy: no-referrer');
 date_default_timezone_set('UTC');
+
+/*
+ * Browser CORS for the Pluschat main site and the single gateway/protection
+ * site. The Cyrillic gateway domain is sent by browsers in punycode form.
+ * "null" is allowed for a local-file diagnostic page; API authentication
+ * still requires explicit bearer tokens and no cookies are enabled.
+ */
+$origin = (string)($_SERVER['HTTP_ORIGIN'] ?? '');
+$allowedOrigins = [
+    'https://xn--80avljg2a1c.xn--p1ai',
+    'https://xn--n1aabel.xn--80avljg2a1c.xn--p1ai',
+    'http://localhost',
+    'http://127.0.0.1',
+    'null',
+];
+if ($origin !== '' && in_array($origin, $allowedOrigins, true)) {
+    header('Access-Control-Allow-Origin: ' . $origin);
+    header('Vary: Origin');
+    header('Access-Control-Allow-Methods: GET, POST, PATCH, DELETE, OPTIONS');
+    header('Access-Control-Allow-Headers: Content-Type, Authorization, X-HTTP-Method-Override');
+    header('Access-Control-Max-Age: 600');
+}
+if (strtoupper((string)($_SERVER['REQUEST_METHOD'] ?? 'GET')) === 'OPTIONS') {
+    if ($origin !== '' && !in_array($origin, $allowedOrigins, true)) {
+        http_response_code(403);
+        exit;
+    }
+    http_response_code(204);
+    exit;
+}
 
 function respond(int $status, array $body): never {
     http_response_code($status);

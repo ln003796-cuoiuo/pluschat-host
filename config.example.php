@@ -3,9 +3,8 @@ declare(strict_types=1);
 
 /*
  * Copy to config.php on the server.
- * The main server must use a DIFFERENT database from the protocol gateway:
- * their sessions/messages schemas are not interchangeable.
- * Never commit production credentials or secret tokens.
+ * Production credentials belong in hosting environment variables or config.php
+ * outside the public web root. Never commit passwords or secret tokens.
  */
 return [
     'db_host' => getenv('PLUSCHAT_DB_HOST') ?: 'localhost',
