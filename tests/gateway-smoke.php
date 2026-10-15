@@ -39,6 +39,27 @@ function check(bool $condition, string $message): void {
     if (!$condition) throw new RuntimeException('Assertion failed: ' . $message);
 }
 
+function apiMultipart(string $path, string $token, string $bytes): array {
+    $boundary = '----PluschatSmoke' . bin2hex(random_bytes(8));
+    $body = '--' . $boundary . "\r\n";
+    $body .= "Content-Disposition: form-data; name=\"avatar\"; filename=\"smoke.png\"\r\n";
+    $body .= "Content-Type: image/png\r\n\r\n" . $bytes . "\r\n";
+    $body .= '--' . $boundary . "--\r\n";
+    $context = stream_context_create(['http'=>[
+        'method'=>'POST',
+        'header'=>"Accept: application/json\r\nAuthorization: Bearer " . $token . "\r\nContent-Type: multipart/form-data; boundary=" . $boundary,
+        'content'=>$body,
+        'ignore_errors'=>true,
+        'timeout'=>10,
+    ]]);
+    $bodyResponse = file_get_contents('http://127.0.0.1:8080/api/v1/' . ltrim($path, '/'), false, $context);
+    $status = 0;
+    foreach (($http_response_header ?? []) as $header) if (preg_match('#^HTTP/\\S+\\s+(\\d+)#', $header, $m)) $status = (int)$m[1];
+    $json = is_string($bodyResponse) && $bodyResponse !== '' ? json_decode($bodyResponse, true) : null;
+    if ($status !== 200 || !is_array($json)) throw new RuntimeException('Multipart ' . $path . ' returned HTTP ' . $status . ': ' . (is_string($bodyResponse) ? $bodyResponse : 'empty response'));
+    return $json;
+}
+
 api('GET', 'health', null, null, [200]);
 $email = 'gateway-test-' . bin2hex(random_bytes(3)) . '@example.test';
 $challengeId = bin2hex(random_bytes(32));
@@ -71,6 +92,11 @@ api('GET','me',null,$access,[401]);
 $access = $newAccess;
 $me = api('GET','me',null,$access);
 check(($me['body']['user']['email'] ?? '') === $email, 'profile endpoint returns current user');
+$png = base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/S9sAAAAASUVORK5CYII=', true);
+check(is_string($png) && apiMultipart('me/avatar',$access,$png)['ok'] === true, 'avatar upload endpoint accepts image');
+$avatarContext = stream_context_create(['http'=>['method'=>'GET','header'=>'Authorization: Bearer ' . $access,'ignore_errors'=>true]]);
+$avatarBytes = file_get_contents('http://127.0.0.1:8080/api/v1/me/avatar',false,$avatarContext);
+check(is_string($avatarBytes) && strlen($avatarBytes)>0, 'authenticated avatar retrieval returns bytes');
 api('PATCH','me',['first_name'=>'GatewayUpdated','last_name'=>'Tester','username'=>'updated_' . bin2hex(random_bytes(3)),'bio'=>'Updated bio','birth_date'=>'2000-01-01','education'=>'Test'], $access);
 $search = api('GET','users/search?q=' . rawurlencode(substr($friendUsername,0,8)),null,$access);
 check(count($search['body']['users'] ?? []) >= 1, 'user search returns matching user');
@@ -84,6 +110,8 @@ api('POST','notifications/read-all',[],$access);
 $chat = api('POST','chats',['type'=>'direct','user_id'=>$friendId],$access);
 $chatId = (string)($chat['body']['chat_id'] ?? $chat['body']['id'] ?? '');
 check($chatId !== '', 'direct chat creation returns chat ID');
+$friendLogin = api('POST','auth/login',['identifier'=>$friendEmail,'password'=>'FriendPass123!']);
+api('GET','chats/' . $chatId . '/messages?limit=50',null,(string)$friendLogin['body']['access_token'],[404]);
 $messageId = '123e4567-e89b-12d3-a456-426614174000';
 api('POST','chats/' . $chatId . '/messages',['client_message_id'=>$messageId,'type'=>'text','body'=>'Gateway smoke test'], $access);
 $history = api('GET','chats/' . $chatId . '/messages?limit=50',null,$access);
