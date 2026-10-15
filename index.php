@@ -16,7 +16,7 @@ if ($path === '/' || $path === '/index.php') {
     http_response_code(200);
     echo json_encode([
         'service' => 'Pluschat main server',
-        'status' => 'online',
+        'status' => 'entrypoint_available',
         'health' => '/api/v1/health',
         'api_version' => 1,
     ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
