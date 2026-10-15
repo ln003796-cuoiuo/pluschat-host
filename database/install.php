@@ -57,6 +57,15 @@ try {
         install_page(503, 'Нет доступа к хранилищу', 'Разреши PHP записывать в storage/avatars.');
     }
 
+    $chatsTable = $db->prepare("SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=? AND TABLE_NAME='chats'");
+    $chatsTable->execute([$config['db_name']]);
+    if ((int)$chatsTable->fetchColumn() > 0) {
+        $db->exec("ALTER TABLE chats MODIFY type ENUM('direct','group','channel') NOT NULL DEFAULT 'direct'");
+        $description = $db->prepare("SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=? AND TABLE_NAME='chats' AND COLUMN_NAME='description'");
+        $description->execute([$config['db_name']]);
+        if ((int)$description->fetchColumn() === 0) $db->exec('ALTER TABLE chats ADD COLUMN description TEXT NULL AFTER title');
+    }
+
     $schemaPath = __DIR__ . '/schema.sql';
     $schema = file_get_contents($schemaPath);
     if ($schema === false) throw new RuntimeException('schema.sql is missing');
