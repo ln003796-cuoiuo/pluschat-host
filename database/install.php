@@ -27,6 +27,11 @@ if (empty($config['db_password']) || empty($config['db_name']) || empty($config[
     install_page(503, 'База данных не настроена', 'Заполни параметры MySQL в config.php.');
 }
 
+$missingExtensions = array_values(array_filter(['pdo_mysql', 'mbstring', 'fileinfo'], static fn(string $ext): bool => !extension_loaded($ext)));
+if ($missingExtensions !== []) {
+    install_page(503, 'Не хватает расширений PHP', 'Включи расширения: ' . implode(', ', $missingExtensions) . '.');
+}
+
 try {
     $dsn = 'mysql:host=' . $config['db_host'] . ';dbname=' . $config['db_name'] . ';charset=utf8mb4';
     $db = new PDO($dsn, $config['db_user'], $config['db_password'], [
@@ -42,6 +47,14 @@ try {
         $column = $db->prepare("SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=? AND TABLE_NAME='users' AND COLUMN_NAME='avatar_path'");
         $column->execute([$config['db_name']]);
         if ((int)$column->fetchColumn() === 0) $db->exec('ALTER TABLE users ADD COLUMN avatar_path VARCHAR(255) NULL AFTER education');
+    }
+
+    $avatarDir = dirname(__DIR__) . '/storage/avatars';
+    if (!is_dir($avatarDir) && !mkdir($avatarDir, 0750, true) && !is_dir($avatarDir)) {
+        install_page(503, 'Нет доступа к хранилищу', 'Создай storage/avatars и разреши PHP записывать в эту папку.');
+    }
+    if (!is_writable($avatarDir)) {
+        install_page(503, 'Нет доступа к хранилищу', 'Разреши PHP записывать в storage/avatars.');
     }
 
     $schemaPath = __DIR__ . '/schema.sql';
