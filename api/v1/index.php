@@ -133,9 +133,11 @@ if ($method === 'POST' && $route === 'auth/registration/verify-phone') {
 }
 if ($method === 'POST' && $route === 'auth/registration/email/start') {
     $parent = trim((string)($data['challenge_id'] ?? ''));
-    $q = $db->prepare("SELECT * FROM auth_challenges WHERE id=? AND kind='phone' AND verified_at IS NOT NULL AND expires_at>UTC_TIMESTAMP() LIMIT 1");
-    $q->execute([$parent]); $phone = $q->fetch();
-    if (!$phone) fail(400, 'phone_not_verified', 'Сначала подтверди номер телефона.');
+    if ($parent !== '') {
+        $q = $db->prepare("SELECT * FROM auth_challenges WHERE id=? AND kind='phone' AND verified_at IS NOT NULL AND expires_at>UTC_TIMESTAMP() LIMIT 1");
+        $q->execute([$parent]); $phone = $q->fetch();
+        if (!$phone) fail(400, 'phone_not_verified', 'Сначала подтверди номер телефона.');
+    }
     $email = strtolower(trim((string)($data['email'] ?? '')));
     if (!filter_var($email, FILTER_VALIDATE_EMAIL)) fail(422, 'invalid_email', 'Укажи корректный email.');
     $q = $db->prepare('SELECT id FROM users WHERE email=?'); $q->execute([$email]);
