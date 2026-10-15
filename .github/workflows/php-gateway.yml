@@ -87,5 +87,7 @@ jobs:
             sleep 1
           done
           test "$ready" -eq 1 || { cat /tmp/pluschat-gateway.log; exit 1; }
+      - name: Run database installer
+        run: curl -fsS 'http://127.0.0.1:8080/public/install.php?token=ci-only-token' | grep -q 'Шлюз Pluschat установлен'
       - name: Run gateway integration tests
         run: php tests/gateway-smoke.php
