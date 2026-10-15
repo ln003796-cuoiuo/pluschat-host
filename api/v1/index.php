@@ -255,7 +255,7 @@ if (preg_match('#^chats/(\d+)/messages$#', $route, $m)) {
         $sql='SELECT m.id,m.chat_id,m.sender_id,m.client_message_id,m.type,m.body,m.created_at,u.username AS sender_username,u.username AS sender_name,CASE WHEN m.sender_id=? THEN 1 ELSE 0 END AS is_mine FROM messages m JOIN users u ON u.id=m.sender_id WHERE m.chat_id=?';
         $params=[$userId,$chatId];if($before>0){$sql.=' AND m.id<?';$params[]=$before;}
         $sql.=' ORDER BY m.id DESC LIMIT '.$limit;
-        $stmt=$db->prepare($sql);$stmt->execute($params);$rows=array_reverse($stmt->fetchAll());respond(200,['messages'=>$rows]);
+        $stmt=$db->prepare($sql);$stmt->execute($params);$rows=array_reverse($stmt->fetchAll());foreach($rows as &$row){$row['is_mine']=(bool)$row['is_mine'];}unset($row);respond(200,['messages'=>$rows]);
     }
     if($method==='POST'){
         $body=trim((string)($data['body']??''));$clientId=trim((string)($data['client_message_id']??''));
