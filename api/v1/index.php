@@ -211,7 +211,13 @@ if ($method === 'PATCH' && $route === 'me') {
     $fn = trim((string)($data['first_name'] ?? $user['first_name']));
     $ln = trim((string)($data['last_name'] ?? $user['last_name']));
     $bio = mb_substr(trim((string)($data['bio'] ?? $user['bio'])),0,500);
-    $db->prepare('UPDATE users SET first_name=?,last_name=?,bio=? WHERE id=?')->execute([$fn,$ln,$bio,$userId]);
+    $username = ltrim(trim((string)($data['username'] ?? $user['username'])), '@');
+    $birth = trim((string)($data['birth_date'] ?? ($user['birth_date'] ?? '')));
+    if (!preg_match('/^[a-zA-Z0-9_]{3,32}$/', $username)) fail(422, 'invalid_username', 'Username: 3–32 символа, латиница, цифры и _.');
+    if ($birth !== '' && !preg_match('/^\\d{4}-\\d{2}-\\d{2}$/', $birth)) fail(422, 'invalid_birth_date', 'Дата рождения должна быть в формате YYYY-MM-DD.');
+    try {
+        $db->prepare('UPDATE users SET first_name=?,last_name=?,username=?,bio=?,birth_date=?,education=? WHERE id=?')->execute([$fn,$ln,$username,$bio,$birth === '' ? null : $birth,mb_substr(trim((string)($data['education'] ?? $user['education'])),0,160),$userId]);
+    } catch (PDOException $e) { if ((string)$e->getCode() === '23000') fail(409, 'username_exists', 'Этот username уже занят.'); throw $e; }
     $q=$db->prepare('SELECT * FROM users WHERE id=?');$q->execute([$userId]);respond(200,['user'=>user_public($q->fetch())]);
 }
 if ($method === 'GET' && $route === 'users/search') {
@@ -223,19 +229,19 @@ if ($method === 'GET' && $route === 'users/search') {
     respond(200, ['users'=>array_map(fn($u)=>['id'=>(string)$u['id'],'first_name'=>$u['first_name'],'last_name'=>$u['last_name'],'username'=>$u['username']],$stmt->fetchAll())]);
 }
 if ($method === 'GET' && $route === 'chats') {
-    $stmt=$db->prepare("SELECT c.id,c.type,c.title, (SELECT m.body FROM messages m WHERE m.chat_id=c.id ORDER BY m.id DESC LIMIT 1) AS last_message FROM chats c JOIN chat_members cm ON cm.chat_id=c.id WHERE cm.user_id=? ORDER BY COALESCE((SELECT MAX(m.id) FROM messages m WHERE m.chat_id=c.id),c.id) DESC LIMIT 100");
-    $stmt->execute([$userId]);respond(200,['chats'=>$stmt->fetchAll()]);
+    $stmt=$db->prepare("SELECT c.id,c.type,CASE WHEN c.type='direct' THEN COALESCE((SELECT CONCAT(u.first_name,' ',u.last_name,' · @',u.username) FROM chat_members other JOIN users u ON u.id=other.user_id WHERE other.chat_id=c.id AND other.user_id<>? LIMIT 1),'Личный чат') ELSE c.title END AS title,(SELECT m.body FROM messages m WHERE m.chat_id=c.id ORDER BY m.id DESC LIMIT 1) AS last_message FROM chats c JOIN chat_members cm ON cm.chat_id=c.id WHERE cm.user_id=? ORDER BY COALESCE((SELECT MAX(m.id) FROM messages m WHERE m.chat_id=c.id),c.id) DESC LIMIT 100");
+    $stmt->execute([$userId,$userId]);respond(200,['chats'=>$stmt->fetchAll()]);
 }
 if ($method === 'POST' && $route === 'chats') {
     if (($data['type'] ?? '') !== 'direct') fail(422,'unsupported_chat_type','Пока доступны только личные чаты.');
     $other=(int)($data['user_id'] ?? 0);if($other<1||$other===$userId)fail(422,'invalid_user','Выбери другого пользователя.');
     $q=$db->prepare('SELECT id FROM users WHERE id=?');$q->execute([$other]);if(!$q->fetchColumn())fail(404,'user_not_found','Пользователь не найден.');
     $q=$db->prepare("SELECT c.id FROM chats c JOIN chat_members a ON a.chat_id=c.id AND a.user_id=? JOIN chat_members b ON b.chat_id=c.id AND b.user_id=? WHERE c.type='direct' LIMIT 1");$q->execute([$userId,$other]);$existing=$q->fetchColumn();
-    if($existing)respond(200,['chat'=>['id'=>(string)$existing]]);
+    if($existing)respond(200,['id'=>(string)$existing,'chat_id'=>(string)$existing,'chat'=>['id'=>(string)$existing]]);
     $db->beginTransaction();
     try{$db->prepare("INSERT INTO chats (type,title,created_by) VALUES ('direct','',?)")->execute([$userId]);$chatId=(int)$db->lastInsertId();$db->prepare('INSERT INTO chat_members (chat_id,user_id) VALUES (?,?),(?,?)')->execute([$chatId,$userId,$chatId,$other]);$db->commit();}
     catch(Throwable $e){$db->rollBack();throw $e;}
-    respond(201,['chat'=>['id'=>(string)$chatId,'type'=>'direct']]);
+    respond(201,['id'=>(string)$chatId,'chat_id'=>(string)$chatId,'chat'=>['id'=>(string)$chatId,'type'=>'direct']]);
 }
 if (preg_match('#^chats/(\d+)$#', $route, $m) && $method === 'GET') {
     $chatId=(int)$m[1];require_member($db,$chatId,$userId);
@@ -246,8 +252,8 @@ if (preg_match('#^chats/(\d+)/messages$#', $route, $m)) {
     if($method==='GET'){
         $limit=max(1,min(100,(int)($_GET['limit']??50)));
         $before=max(0,(int)($_GET['before']??0));
-        $sql='SELECT m.id,m.chat_id,m.sender_id,m.client_message_id,m.type,m.body,m.created_at,u.username AS sender_username FROM messages m JOIN users u ON u.id=m.sender_id WHERE m.chat_id=?';
-        $params=[$chatId];if($before>0){$sql.=' AND m.id<?';$params[]=$before;}
+        $sql='SELECT m.id,m.chat_id,m.sender_id,m.client_message_id,m.type,m.body,m.created_at,u.username AS sender_username,u.username AS sender_name,CASE WHEN m.sender_id=? THEN 1 ELSE 0 END AS is_mine FROM messages m JOIN users u ON u.id=m.sender_id WHERE m.chat_id=?';
+        $params=[$userId,$chatId];if($before>0){$sql.=' AND m.id<?';$params[]=$before;}
         $sql.=' ORDER BY m.id DESC LIMIT '.$limit;
         $stmt=$db->prepare($sql);$stmt->execute($params);$rows=array_reverse($stmt->fetchAll());respond(200,['messages'=>$rows]);
     }
