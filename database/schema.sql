@@ -43,8 +43,9 @@ CREATE TABLE IF NOT EXISTS sessions (
 
 CREATE TABLE IF NOT EXISTS chats (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
-  type ENUM('direct','group') NOT NULL DEFAULT 'direct',
+  type ENUM('direct','group','channel') NOT NULL DEFAULT 'direct',
   title VARCHAR(120) NOT NULL DEFAULT '',
+  description TEXT NULL,
   created_by BIGINT UNSIGNED NOT NULL,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   KEY idx_chats_created_by (created_by),
@@ -95,4 +96,43 @@ CREATE TABLE IF NOT EXISTS notifications (
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   KEY idx_notifications_user (user_id, id),
   CONSTRAINT fk_notifications_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS groups (
+  chat_id BIGINT UNSIGNED NOT NULL PRIMARY KEY,
+  is_public TINYINT(1) NOT NULL DEFAULT 0,
+  topics_enabled TINYINT(1) NOT NULL DEFAULT 1,
+  description TEXT NULL,
+  CONSTRAINT fk_groups_chat FOREIGN KEY (chat_id) REFERENCES chats(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS channels (
+  chat_id BIGINT UNSIGNED NOT NULL PRIMARY KEY,
+  is_public TINYINT(1) NOT NULL DEFAULT 0,
+  username VARCHAR(32) NULL UNIQUE,
+  description TEXT NULL,
+  CONSTRAINT fk_channels_chat FOREIGN KEY (chat_id) REFERENCES chats(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS topics (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  chat_id BIGINT UNSIGNED NOT NULL,
+  title VARCHAR(120) NOT NULL,
+  description TEXT NULL,
+  created_by BIGINT UNSIGNED NOT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  KEY idx_topics_chat (chat_id, id),
+  CONSTRAINT fk_topics_chat FOREIGN KEY (chat_id) REFERENCES chats(id) ON DELETE CASCADE,
+  CONSTRAINT fk_topics_creator FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS channel_posts (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  channel_id BIGINT UNSIGNED NOT NULL,
+  sender_id BIGINT UNSIGNED NOT NULL,
+  body TEXT NOT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  KEY idx_channel_posts (channel_id, id),
+  CONSTRAINT fk_channel_posts_channel FOREIGN KEY (channel_id) REFERENCES channels(chat_id) ON DELETE CASCADE,
+  CONSTRAINT fk_channel_posts_sender FOREIGN KEY (sender_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
