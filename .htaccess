@@ -1,8 +1,13 @@
 Options -Indexes
+
 <FilesMatch "^(config\.php|config\.example\.php|\.env|\.env\.example|\.gitignore|composer\.json)$">
   Require all denied
 </FilesMatch>
+
 <IfModule mod_rewrite.c>
   RewriteEngine On
   RewriteRule ^(?:\.git|src|database|tests|storage)(?:/|$) - [F,L,NC]
+  RewriteCond %{REQUEST_FILENAME} !-f
+  RewriteCond %{REQUEST_FILENAME} !-d
+  RewriteRule ^ index.php [QSA,L]
 </IfModule>
