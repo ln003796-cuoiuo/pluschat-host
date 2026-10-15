@@ -362,7 +362,7 @@ if ($route === 'me/avatar' && $method === 'GET') {
 
 
 if ($route === 'groups' && $method === 'GET') {
-    $stmt = $db->prepare("SELECT c.id,c.id AS group_id,c.title,COALESCE(g.description,c.description,'') AS description,IF(g.is_public=1,'public','private') AS visibility,g.topics_enabled FROM chats c JOIN groups g ON g.chat_id=c.id JOIN chat_members cm ON cm.chat_id=c.id WHERE cm.user_id=? ORDER BY c.id DESC LIMIT 200");
+    $stmt = $db->prepare("SELECT c.id,c.id AS group_id,c.title,COALESCE(g.description,c.description,'') AS description,IF(g.is_public=1,'public','private') AS visibility,g.topics_enabled FROM chats c JOIN `groups` g ON g.chat_id=c.id JOIN chat_members cm ON cm.chat_id=c.id WHERE cm.user_id=? ORDER BY c.id DESC LIMIT 200");
     $stmt->execute([$userId]);
     respond(200, ['groups'=>$stmt->fetchAll()]);
 }
@@ -376,7 +376,7 @@ if ($route === 'groups' && $method === 'POST') {
         $db->prepare("INSERT INTO chats(type,title,description,created_by) VALUES('group',?,?,?)")->execute([$title,$description,$userId]);
         $id = (int)$db->lastInsertId();
         $db->prepare("INSERT INTO chat_members(chat_id,user_id,role) VALUES(?,?, 'owner')")->execute([$id,$userId]);
-        $db->prepare('INSERT INTO groups(chat_id,is_public,topics_enabled,description) VALUES(?,?,1,?)')->execute([$id,$visibility==='public'?1:0,$description]);
+        $db->prepare('INSERT INTO `groups`(chat_id,is_public,topics_enabled,description) VALUES(?,?,1,?)')->execute([$id,$visibility==='public'?1:0,$description]);
         $db->commit();
     } catch (Throwable $e) { if ($db->inTransaction()) $db->rollBack(); throw $e; }
     respond(201, ['id'=>(string)$id,'group_id'=>(string)$id,'title'=>$title,'description'=>$description]);
@@ -386,7 +386,7 @@ if (preg_match('#^groups/(\\d+)$#', $route, $m) && $method === 'PATCH') {
     $title = trim((string)($data['title'] ?? '')); $description = mb_substr(trim((string)($data['description'] ?? '')),0,4000);
     if ($title === '' || mb_strlen($title)>120) fail(422,'invalid_group','Название должно содержать от 1 до 120 символов.');
     $db->prepare("UPDATE chats SET title=?,description=? WHERE id=? AND type='group'")->execute([$title,$description,$id]);
-    $db->prepare('UPDATE groups SET description=? WHERE chat_id=?')->execute([$description,$id]);
+    $db->prepare('UPDATE `groups` SET description=? WHERE chat_id=?')->execute([$description,$id]);
     respond(200,['ok'=>true,'id'=>(string)$id,'title'=>$title,'description'=>$description]);
 }
 if (preg_match('#^groups/(\\d+)/topics$#', $route, $m)) {
