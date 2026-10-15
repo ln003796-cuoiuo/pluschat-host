@@ -1,4 +1,8 @@
 <?php
 declare(strict_types=1);
-require dirname(__DIR__).'/bootstrap.php';
-(new PlusChat\App(dirname(__DIR__)))->run();
+
+/*
+ * Public document-root entrypoint.
+ * Routes API requests through the MySQL-backed API implementation in /api/v1.
+ */
+require dirname(__DIR__) . '/index.php';
