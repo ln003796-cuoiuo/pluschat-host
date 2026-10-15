@@ -2,7 +2,7 @@ name: PHP gateway checks
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, main-server-mysql ]
   pull_request:
     branches: [ main ]
   workflow_dispatch:
