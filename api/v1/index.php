@@ -272,4 +272,67 @@ if (preg_match('#^chats/(\d+)/messages$#', $route, $m)) {
         $q=$db->prepare('SELECT id,chat_id,sender_id,client_message_id,type,body,created_at FROM messages WHERE id=?');$q->execute([$messageId]);respond(201,['message'=>$q->fetch()]);
     }
 }
+
+if ($method === 'GET' && $route === 'contacts') {
+    $stmt = $db->prepare('SELECT u.id,u.first_name,u.last_name,u.username,c.alias,c.created_at AS added_at FROM contacts c JOIN users u ON u.id=c.contact_id WHERE c.owner_id=? ORDER BY COALESCE(c.alias,u.username),u.username LIMIT 500');
+    $stmt->execute([$userId]);
+    respond(200, ['contacts'=>$stmt->fetchAll()]);
+}
+if ($method === 'POST' && $route === 'contacts') {
+    $target = (int)($data['user_id'] ?? 0);
+    if ($target < 1 || $target === $userId) fail(422, 'invalid_contact', 'Выбери другого пользователя.');
+    $q = $db->prepare('SELECT id FROM users WHERE id=?');
+    $q->execute([$target]);
+    if (!$q->fetchColumn()) fail(404, 'user_not_found', 'Пользователь не найден.');
+    $db->prepare('INSERT IGNORE INTO contacts(owner_id,contact_id,alias) VALUES(?,?,?)')->execute([$userId,$target,mb_substr(trim((string)($data['alias'] ?? '')),0,120) ?: null]);
+    respond(200, ['ok'=>true]);
+}
+if (preg_match('#^contacts/(\\d+)$#', $route, $m) && $method === 'DELETE') {
+    $db->prepare('DELETE FROM contacts WHERE owner_id=? AND contact_id=?')->execute([$userId,(int)$m[1]]);
+    respond(200, ['ok'=>true]);
+}
+if ($method === 'GET' && $route === 'notifications') {
+    $stmt = $db->prepare('SELECT id,type,payload,read_at,created_at FROM notifications WHERE user_id=? ORDER BY id DESC LIMIT 100');
+    $stmt->execute([$userId]);
+    respond(200, ['notifications'=>$stmt->fetchAll()]);
+}
+if (preg_match('#^notifications/(\\d+)/read$#', $route, $m) && $method === 'POST') {
+    $db->prepare('UPDATE notifications SET read_at=UTC_TIMESTAMP() WHERE id=? AND user_id=? AND read_at IS NULL')->execute([(int)$m[1],$userId]);
+    respond(200, ['ok'=>true]);
+}
+if ($method === 'POST' && $route === 'notifications/read-all') {
+    $db->prepare('UPDATE notifications SET read_at=UTC_TIMESTAMP() WHERE user_id=? AND read_at IS NULL')->execute([$userId]);
+    respond(200, ['ok'=>true]);
+}
+if ($route === 'me/avatar' && $method === 'POST') {
+    if (!isset($_FILES['avatar']) || !is_uploaded_file($_FILES['avatar']['tmp_name'])) fail(422, 'avatar_missing', 'Выбери изображение для загрузки.');
+    $file = $_FILES['avatar'];
+    if ((int)$file['error'] !== UPLOAD_ERR_OK) fail(422, 'avatar_upload_failed', 'Не удалось принять файл аватара.');
+    if ((int)$file['size'] < 1 || (int)$file['size'] > 5 * 1024 * 1024) fail(413, 'avatar_too_large', 'Размер аватара не должен превышать 5 МБ.');
+    $finfo = new finfo(FILEINFO_MIME_TYPE);
+    $mime = $finfo->file($file['tmp_name']);
+    $extensions = ['image/jpeg'=>'jpg','image/png'=>'png','image/webp'=>'webp'];
+    if (!isset($extensions[$mime])) fail(415, 'avatar_type_not_supported', 'Поддерживаются только JPEG, PNG и WebP.');
+    $avatarDir = dirname(__DIR__, 2) . '/storage/avatars';
+    if (!is_dir($avatarDir) && !mkdir($avatarDir, 0750, true) && !is_dir($avatarDir)) fail(500, 'storage_unavailable', 'Хранилище файлов недоступно.');
+    $filename = bin2hex(random_bytes(24)) . '.' . $extensions[$mime];
+    if (!move_uploaded_file($file['tmp_name'], $avatarDir . '/' . $filename)) fail(500, 'avatar_save_failed', 'Не удалось сохранить аватар.');
+    $old = (string)($user['avatar_path'] ?? '');
+    $db->prepare('UPDATE users SET avatar_path=? WHERE id=?')->execute([$filename,$userId]);
+    if ($old !== '' && basename($old) === $old) @unlink($avatarDir . '/' . $old);
+    respond(200, ['ok'=>true, 'avatar_url'=>'me/avatar']);
+}
+if ($route === 'me/avatar' && $method === 'GET') {
+    $filename = basename((string)($user['avatar_path'] ?? ''));
+    $filePath = dirname(__DIR__, 2) . '/storage/avatars/' . $filename;
+    if ($filename === '' || !is_file($filePath)) fail(404, 'avatar_not_found', 'Аватар не загружен.');
+    $mime = (new finfo(FILEINFO_MIME_TYPE))->file($filePath);
+    if (!in_array($mime, ['image/jpeg','image/png','image/webp'], true)) fail(415, 'avatar_type_not_supported', 'Неподдерживаемый формат аватара.');
+    header('Content-Type: ' . $mime);
+    header('Cache-Control: private, max-age=300');
+    header('Content-Length: ' . filesize($filePath));
+    readfile($filePath);
+    exit;
+}
+
 fail(404,'route_not_found','Такого API-маршрута нет.');
