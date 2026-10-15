@@ -1,35 +1,60 @@
 <?php
 declare(strict_types=1);
-require dirname(__DIR__).'/bootstrap.php';
+
+require dirname(__DIR__) . '/bootstrap.php';
 header('Content-Type: text/html; charset=utf-8');
-$token=(string)($_GET['token']??'');$expected=(string)(getenv('INSTALL_TOKEN')??'');
-if($expected===''||!hash_equals($expected,$token)){http_response_code(403);exit('Installer access denied');}
-$host=getenv('DB_HOST')?:'127.0.0.1';$port=getenv('DB_PORT')?:'5432';$name=preg_replace('/[^A-Za-z0-9_]/','',(string)(getenv('DB_DATABASE')?:'pluschat'));
-$user=getenv('DB_ADMIN_USERNAME')?:getenv('DB_USERNAME')?:'';$pass=getenv('DB_ADMIN_PASSWORD')?:getenv('DB_PASSWORD')?:'';
-try{
- $admin=new PDO("pgsql:host={$host};port={$port};dbname=postgres",$user,$pass,[PDO::ATTR_ERRMODE=>PDO::ERRMODE_EXCEPTION]);
- $q=$admin->prepare('SELECT 1 FROM pg_database WHERE datname=?');$q->execute([$name]);
- if(!$q->fetchColumn())$admin->exec('CREATE DATABASE "'.$name.'"');
- $db=new PDO("pgsql:host={$host};port={$port};dbname={$name}",$user,$pass,[PDO::ATTR_ERRMODE=>PDO::ERRMODE_EXCEPTION]);
- $db->exec('CREATE EXTENSION IF NOT EXISTS pgcrypto');
- $sql=[
-"CREATE TABLE IF NOT EXISTS users(id BIGSERIAL PRIMARY KEY,email VARCHAR(320) UNIQUE NOT NULL,password_hash TEXT NOT NULL,display_name VARCHAR(120) NOT NULL DEFAULT 'New user',username VARCHAR(32) UNIQUE,first_name VARCHAR(120),last_name VARCHAR(120),bio TEXT,birth_date DATE,avatar_file_id VARCHAR(64),location JSONB,school_or_work JSONB,email_verified BOOLEAN NOT NULL DEFAULT FALSE,is_blocked BOOLEAN NOT NULL DEFAULT FALSE,admin_role VARCHAR(30) NOT NULL DEFAULT 'user',created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW())",
-"CREATE TABLE IF NOT EXISTS sessions(id BIGSERIAL PRIMARY KEY,user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,token_hash BYTEA UNIQUE NOT NULL,device_name VARCHAR(120),ip INET,user_agent TEXT,expires_at TIMESTAMPTZ NOT NULL,revoked_at TIMESTAMPTZ,last_seen_at TIMESTAMPTZ,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())",
-"CREATE TABLE IF NOT EXISTS email_verifications(id BIGSERIAL PRIMARY KEY,user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,code_hash TEXT NOT NULL,expires_at TIMESTAMPTZ NOT NULL,used_at TIMESTAMPTZ)",
-"CREATE TABLE IF NOT EXISTS password_resets(id BIGSERIAL PRIMARY KEY,user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,token_hash BYTEA UNIQUE NOT NULL,device_name VARCHAR(120),ip INET,user_agent TEXT,last_seen_at TIMESTAMPTZ,expires_at TIMESTAMPTZ NOT NULL,used_at TIMESTAMPTZ)",
-"CREATE TABLE IF NOT EXISTS chats(id BIGSERIAL PRIMARY KEY,type VARCHAR(20) NOT NULL DEFAULT 'private',title VARCHAR(160),description TEXT,created_by BIGINT REFERENCES users(id),created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW())",
-"CREATE TABLE IF NOT EXISTS chat_members(chat_id BIGINT NOT NULL REFERENCES chats(id) ON DELETE CASCADE,user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,role VARCHAR(30) NOT NULL DEFAULT 'member',joined_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),PRIMARY KEY(chat_id,user_id))",
-"CREATE TABLE IF NOT EXISTS groups(chat_id BIGINT PRIMARY KEY REFERENCES chats(id) ON DELETE CASCADE,topics_enabled BOOLEAN NOT NULL DEFAULT FALSE,description TEXT,rules TEXT)",
-"CREATE TABLE IF NOT EXISTS channels(chat_id BIGINT PRIMARY KEY REFERENCES chats(id) ON DELETE CASCADE,is_public BOOLEAN NOT NULL DEFAULT FALSE,username VARCHAR(32) UNIQUE,description TEXT,comments_enabled BOOLEAN NOT NULL DEFAULT FALSE)",
-"CREATE TABLE IF NOT EXISTS topics(id BIGSERIAL PRIMARY KEY,chat_id BIGINT NOT NULL REFERENCES chats(id) ON DELETE CASCADE,name VARCHAR(120) NOT NULL,icon VARCHAR(20),archived BOOLEAN NOT NULL DEFAULT FALSE,pinned BOOLEAN NOT NULL DEFAULT FALSE,converted_chat_id BIGINT,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())",
-"CREATE TABLE IF NOT EXISTS messages(id BIGSERIAL PRIMARY KEY,chat_id BIGINT NOT NULL REFERENCES chats(id) ON DELETE CASCADE,sender_id BIGINT NOT NULL REFERENCES users(id),body TEXT,reply_to_id BIGINT REFERENCES messages(id),forwarded_from_id BIGINT REFERENCES messages(id),topic_id BIGINT REFERENCES topics(id),forwarded_from_id BIGINT,edited_at TIMESTAMPTZ,deleted_at TIMESTAMPTZ,pinned BOOLEAN NOT NULL DEFAULT FALSE,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())",
-"CREATE TABLE IF NOT EXISTS message_reactions(message_id BIGINT NOT NULL REFERENCES messages(id) ON DELETE CASCADE,user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,emoji VARCHAR(64) NOT NULL,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),PRIMARY KEY(message_id,user_id,emoji))",
-"CREATE TABLE IF NOT EXISTS message_status(message_id BIGINT NOT NULL REFERENCES messages(id) ON DELETE CASCADE,user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,delivered_at TIMESTAMPTZ,read_at TIMESTAMPTZ,PRIMARY KEY(message_id,user_id))",
-"CREATE TABLE IF NOT EXISTS contacts(owner_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,contact_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,alias VARCHAR(120),created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),PRIMARY KEY(owner_id,contact_id))",
-"CREATE TABLE IF NOT EXISTS blocks(owner_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,blocked_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),PRIMARY KEY(owner_id,blocked_id))",
-"CREATE TABLE IF NOT EXISTS reports(id BIGSERIAL PRIMARY KEY,reporter_id BIGINT NOT NULL REFERENCES users(id),target_user_id BIGINT REFERENCES users(id),chat_id BIGINT REFERENCES chats(id),message_id BIGINT REFERENCES messages(id),reason VARCHAR(80) NOT NULL,details TEXT,status VARCHAR(20) NOT NULL DEFAULT 'open',resolved_at TIMESTAMPTZ,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())",
-"CREATE TABLE IF NOT EXISTS notifications(id BIGSERIAL PRIMARY KEY,user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,type VARCHAR(50) NOT NULL,payload JSONB NOT NULL DEFAULT '{}'::jsonb,read_at TIMESTAMPTZ,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())"
- ];
- foreach($sql as $statement)$db->exec($statement);$db->exec("CREATE TABLE IF NOT EXISTS message_reactions(message_id BIGINT NOT NULL REFERENCES messages(id) ON DELETE CASCADE,user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,emoji VARCHAR(64) NOT NULL,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),PRIMARY KEY(message_id,user_id,emoji))");$db->exec("CREATE TABLE IF NOT EXISTS user_settings(user_id BIGINT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,settings JSONB NOT NULL DEFAULT '{}'::jsonb,updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW())");$db->exec("CREATE TABLE IF NOT EXISTS chat_settings(chat_id BIGINT NOT NULL REFERENCES chats(id) ON DELETE CASCADE,user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,muted BOOLEAN NOT NULL DEFAULT FALSE,archived BOOLEAN NOT NULL DEFAULT FALSE,disappearing_seconds INTEGER,topic_notifications BOOLEAN NOT NULL DEFAULT TRUE,PRIMARY KEY(chat_id,user_id))");
- echo '<h1>PlusChat database installed</h1><p>Database: '.htmlspecialchars($name,ENT_QUOTES,'UTF-8').'</p>';
-}catch(Throwable $e){http_response_code(500);echo 'Installation failed';}
+header('Cache-Control: no-store');
+header('X-Content-Type-Options: nosniff');
+
+function install_page(int $status, string $title, string $message): never {
+    http_response_code($status);
+    echo '<!doctype html><html lang="ru"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">';
+    echo '<title>' . htmlspecialchars($title, ENT_QUOTES, 'UTF-8') . '</title>';
+    echo '<main style="font:16px system-ui;max-width:680px;margin:10vh auto;padding:24px;border:1px solid #ddd;border-radius:16px">';
+    echo '<h1>' . htmlspecialchars($title, ENT_QUOTES, 'UTF-8') . '</h1><p>' . htmlspecialchars($message, ENT_QUOTES, 'UTF-8') . '</p></main></html>';
+    exit;
+}
+
+$configPath = dirname(__DIR__) . '/config.php';
+if (!is_file($configPath)) install_page(503, 'Шлюз не настроен', 'Сначала создай config.php на основе config.example.php и заполни данные MySQL.');
+$config = require $configPath;
+$expected = (string)(getenv('INSTALL_TOKEN') ?: ($config['install_token'] ?? ''));
+$provided = (string)($_GET['token'] ?? '');
+if ($expected === '' || $provided === '' || !hash_equals($expected, $provided)) {
+    install_page(403, 'Доступ запрещён', 'Ссылка установки недействительна. Укажи корректный INSTALL_TOKEN.');
+}
+if (empty($config['db_password']) || empty($config['db_name']) || empty($config['db_user'])) {
+    install_page(503, 'База данных не настроена', 'Заполни параметры MySQL в config.php.');
+}
+
+try {
+    $dsn = 'mysql:host=' . $config['db_host'] . ';dbname=' . $config['db_name'] . ';charset=utf8mb4';
+    $db = new PDO($dsn, $config['db_user'], $config['db_password'], [
+        PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+        PDO::ATTR_EMULATE_PREPARES => false,
+    ]);
+
+    // Upgrade an existing database safely: CREATE TABLE IF NOT EXISTS alone does not add new columns.
+    $table = $db->prepare("SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=? AND TABLE_NAME='users'");
+    $table->execute([$config['db_name']]);
+    if ((int)$table->fetchColumn() > 0) {
+        $column = $db->prepare("SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=? AND TABLE_NAME='users' AND COLUMN_NAME='avatar_path'");
+        $column->execute([$config['db_name']]);
+        if ((int)$column->fetchColumn() === 0) $db->exec('ALTER TABLE users ADD COLUMN avatar_path VARCHAR(255) NULL AFTER education');
+    }
+
+    $schemaPath = __DIR__ . '/schema.sql';
+    $schema = file_get_contents($schemaPath);
+    if ($schema === false) throw new RuntimeException('schema.sql is missing');
+    $statements = preg_split('/;\\s*(?:\\r?\\n|$)/', $schema);
+    foreach ($statements as $statement) {
+        $statement = trim($statement);
+        if ($statement !== '') $db->exec($statement);
+    }
+
+    install_page(200, 'Шлюз Pluschat установлен', 'Структура MySQL создана или обновлена. Теперь удали INSTALL_TOKEN из config.php или переменных окружения и отключи/удали публичную страницу установки.');
+} catch (Throwable $e) {
+    error_log('Pluschat gateway installer: ' . $e->getMessage());
+    install_page(500, 'Установка не завершена', 'Не удалось создать структуру базы. Проверь доступ пользователя MySQL и журнал ошибок PHP на хостинге.');
+}
