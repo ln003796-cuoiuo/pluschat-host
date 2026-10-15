@@ -103,6 +103,14 @@ function require_member(PDO $db, int $chatId, int $userId): void {
     $q->execute([$chatId, $userId]);
     if (!$q->fetchColumn()) fail(404, 'chat_not_found', 'Чат не найден.');
 }
+function require_role(PDO $db, int $chatId, int $userId, array $roles): string {
+    $q = $db->prepare('SELECT role FROM chat_members WHERE chat_id=? AND user_id=? LIMIT 1');
+    $q->execute([$chatId, $userId]);
+    $role = $q->fetchColumn();
+    if ($role === false) fail(404, 'community_not_found', 'Сообщество не найдено.');
+    if (!in_array((string)$role, $roles, true)) fail(403, 'forbidden', 'Недостаточно прав для этого действия.');
+    return (string)$role;
+}
 
 try {
     $config = require dirname(__DIR__, 2) . '/config.php';
@@ -350,6 +358,112 @@ if ($route === 'me/avatar' && $method === 'GET') {
     header('Content-Length: ' . filesize($filePath));
     readfile($filePath);
     exit;
+}
+
+
+if ($route === 'groups' && $method === 'GET') {
+    $stmt = $db->prepare("SELECT c.id,c.id AS group_id,c.title,COALESCE(g.description,c.description,'') AS description,IF(g.is_public=1,'public','private') AS visibility,g.topics_enabled FROM chats c JOIN groups g ON g.chat_id=c.id JOIN chat_members cm ON cm.chat_id=c.id WHERE cm.user_id=? ORDER BY c.id DESC LIMIT 200");
+    $stmt->execute([$userId]);
+    respond(200, ['groups'=>$stmt->fetchAll()]);
+}
+if ($route === 'groups' && $method === 'POST') {
+    $title = trim((string)($data['title'] ?? ''));
+    $description = mb_substr(trim((string)($data['description'] ?? '')), 0, 4000);
+    $visibility = strtolower(trim((string)($data['visibility'] ?? 'private')));
+    if ($title === '' || mb_strlen($title) > 120 || !in_array($visibility, ['private','public'], true)) fail(422, 'invalid_group', 'Укажи название до 120 символов и видимость private или public.');
+    $db->beginTransaction();
+    try {
+        $db->prepare("INSERT INTO chats(type,title,description,created_by) VALUES('group',?,?,?)")->execute([$title,$description,$userId]);
+        $id = (int)$db->lastInsertId();
+        $db->prepare("INSERT INTO chat_members(chat_id,user_id,role) VALUES(?,?, 'owner')")->execute([$id,$userId]);
+        $db->prepare('INSERT INTO groups(chat_id,is_public,topics_enabled,description) VALUES(?,?,1,?)')->execute([$id,$visibility==='public'?1:0,$description]);
+        $db->commit();
+    } catch (Throwable $e) { if ($db->inTransaction()) $db->rollBack(); throw $e; }
+    respond(201, ['id'=>(string)$id,'group_id'=>(string)$id,'title'=>$title,'description'=>$description]);
+}
+if (preg_match('#^groups/(\\d+)$#', $route, $m) && $method === 'PATCH') {
+    $id = (int)$m[1]; require_role($db,$id,$userId,['owner','admin']);
+    $title = trim((string)($data['title'] ?? '')); $description = mb_substr(trim((string)($data['description'] ?? '')),0,4000);
+    if ($title === '' || mb_strlen($title)>120) fail(422,'invalid_group','Название должно содержать от 1 до 120 символов.');
+    $db->prepare("UPDATE chats SET title=?,description=? WHERE id=? AND type='group'")->execute([$title,$description,$id]);
+    $db->prepare('UPDATE groups SET description=? WHERE chat_id=?')->execute([$description,$id]);
+    respond(200,['ok'=>true,'id'=>(string)$id,'title'=>$title,'description'=>$description]);
+}
+if (preg_match('#^groups/(\\d+)/topics$#', $route, $m)) {
+    $id=(int)$m[1]; require_member($db,$id,$userId);
+    if ($method==='GET') {
+        $q=$db->prepare('SELECT id,chat_id,title,description,created_at FROM topics WHERE chat_id=? ORDER BY id DESC LIMIT 200');
+        $q->execute([$id]); respond(200,['topics'=>$q->fetchAll()]);
+    }
+    if ($method==='POST') {
+        require_role($db,$id,$userId,['owner','admin','moderator']);
+        $title=trim((string)($data['title']??''));$description=mb_substr(trim((string)($data['description']??'')),0,4000);
+        if($title===''||mb_strlen($title)>120)fail(422,'invalid_topic','Название темы должно содержать от 1 до 120 символов.');
+        $q=$db->prepare("SELECT 1 FROM chats WHERE id=? AND type='group'");$q->execute([$id]);if(!$q->fetchColumn())fail(404,'group_not_found','Группа не найдена.');
+        $db->prepare('INSERT INTO topics(chat_id,title,description,created_by) VALUES(?,?,?,?)')->execute([$id,$title,$description,$userId]);
+        respond(201,['id'=>(string)$db->lastInsertId(),'chat_id'=>(string)$id,'title'=>$title,'description'=>$description]);
+    }
+}
+if (preg_match('#^groups/(\\d+)/members$#', $route, $m)) {
+    $id=(int)$m[1];
+    if ($method==='GET') {
+        require_member($db,$id,$userId);
+        $q=$db->prepare('SELECT u.id,u.first_name,u.last_name,u.username,cm.role,cm.joined_at FROM chat_members cm JOIN users u ON u.id=cm.user_id WHERE cm.chat_id=? ORDER BY cm.joined_at LIMIT 500');
+        $q->execute([$id]);respond(200,['members'=>$q->fetchAll()]);
+    }
+    if ($method==='POST') {
+        require_role($db,$id,$userId,['owner','admin','moderator']);
+        $target=(int)($data['user_id']??0);if($target<1||$target===$userId)fail(422,'invalid_user','Укажи ID другого пользователя.');
+        $q=$db->prepare('SELECT id FROM users WHERE id=?');$q->execute([$target]);if(!$q->fetchColumn())fail(404,'user_not_found','Пользователь не найден.');
+        $q=$db->prepare("SELECT 1 FROM chats WHERE id=? AND type='group'");$q->execute([$id]);if(!$q->fetchColumn())fail(404,'group_not_found','Группа не найдена.');
+        $db->prepare("INSERT IGNORE INTO chat_members(chat_id,user_id,role) VALUES(?,?,'member')")->execute([$id,$target]);
+        respond(200,['ok'=>true]);
+    }
+}
+if ($route === 'channels' && $method === 'GET') {
+    $stmt=$db->prepare("SELECT c.id,c.id AS channel_id,c.title,COALESCE(ch.description,c.description,'') AS description,IF(ch.is_public=1,'public','private') AS visibility FROM chats c JOIN channels ch ON ch.chat_id=c.id JOIN chat_members cm ON cm.chat_id=c.id WHERE cm.user_id=? ORDER BY c.id DESC LIMIT 200");
+    $stmt->execute([$userId]);respond(200,['channels'=>$stmt->fetchAll()]);
+}
+if ($route === 'channels' && $method === 'POST') {
+    $title=trim((string)($data['title']??''));$description=mb_substr(trim((string)($data['description']??'')),0,4000);
+    $visibility=strtolower(trim((string)($data['visibility']??'private')));
+    if($title===''||mb_strlen($title)>120||!in_array($visibility,['private','public'],true))fail(422,'invalid_channel','Укажи название до 120 символов и видимость private или public.');
+    $db->beginTransaction();
+    try {
+        $db->prepare("INSERT INTO chats(type,title,description,created_by) VALUES('channel',?,?,?)")->execute([$title,$description,$userId]);
+        $id=(int)$db->lastInsertId();
+        $db->prepare("INSERT INTO chat_members(chat_id,user_id,role) VALUES(?,?,'owner')")->execute([$id,$userId]);
+        $db->prepare('INSERT INTO channels(chat_id,is_public,description) VALUES(?,?,?)')->execute([$id,$visibility==='public'?1:0,$description]);
+        $db->commit();
+    } catch(Throwable $e) { if($db->inTransaction())$db->rollBack(); throw $e; }
+    respond(201,['id'=>(string)$id,'channel_id'=>(string)$id,'title'=>$title,'description'=>$description]);
+}
+if (preg_match('#^channels/(\\d+)$#', $route, $m) && $method === 'PATCH') {
+    $id=(int)$m[1];require_role($db,$id,$userId,['owner','admin']);
+    $title=trim((string)($data['title']??''));$description=mb_substr(trim((string)($data['description']??'')),0,4000);
+    if($title===''||mb_strlen($title)>120)fail(422,'invalid_channel','Название должно содержать от 1 до 120 символов.');
+    $db->prepare("UPDATE chats SET title=?,description=? WHERE id=? AND type='channel'")->execute([$title,$description,$id]);
+    $db->prepare('UPDATE channels SET description=? WHERE chat_id=?')->execute([$description,$id]);
+    respond(200,['ok'=>true,'id'=>(string)$id,'title'=>$title,'description'=>$description]);
+}
+if (preg_match('#^channels/(\\d+)/posts$#', $route, $m)) {
+    $id=(int)$m[1];require_member($db,$id,$userId);
+    if($method==='GET') {
+        $q=$db->prepare('SELECT p.id,p.channel_id,p.body,p.created_at,u.username,u.first_name,u.last_name FROM channel_posts p JOIN users u ON u.id=p.sender_id WHERE p.channel_id=? ORDER BY p.id DESC LIMIT 100');
+        $q->execute([$id]);$rows=array_reverse($q->fetchAll());respond(200,['posts'=>$rows]);
+    }
+    if($method==='POST') {
+        require_role($db,$id,$userId,['owner','admin']);
+        $body=trim((string)($data['body']??''));if($body===''||mb_strlen($body)>20000)fail(422,'invalid_post','Текст публикации должен содержать от 1 до 20000 символов.');
+        $q=$db->prepare("SELECT 1 FROM chats WHERE id=? AND type='channel'");$q->execute([$id]);if(!$q->fetchColumn())fail(404,'channel_not_found','Канал не найден.');
+        $db->prepare('INSERT INTO channel_posts(channel_id,sender_id,body) VALUES(?,?,?)')->execute([$id,$userId,$body]);
+        respond(201,['id'=>(string)$db->lastInsertId(),'channel_id'=>(string)$id,'body'=>$body]);
+    }
+}
+if (preg_match('#^channels/(\\d+)/subscribers$#', $route, $m) && $method === 'GET') {
+    $id=(int)$m[1];require_member($db,$id,$userId);
+    $q=$db->prepare('SELECT u.id,u.first_name,u.last_name,u.username,cm.role,cm.joined_at FROM chat_members cm JOIN users u ON u.id=cm.user_id WHERE cm.chat_id=? ORDER BY cm.joined_at LIMIT 1000');
+    $q->execute([$id]);respond(200,['subscribers'=>$q->fetchAll()]);
 }
 
 fail(404,'route_not_found','Такого API-маршрута нет.');
