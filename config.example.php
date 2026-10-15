@@ -3,11 +3,13 @@ declare(strict_types=1);
 
 /*
  * Copy to config.php on the server.
+ * The main server must use a DIFFERENT database from the protocol gateway:
+ * their sessions/messages schemas are not interchangeable.
  * Never commit production credentials or secret tokens.
  */
 return [
     'db_host' => getenv('PLUSCHAT_DB_HOST') ?: 'localhost',
-    'db_name' => getenv('PLUSCHAT_DB_NAME') ?: 'Pluschat',
+    'db_name' => getenv('PLUSCHAT_DB_NAME') ?: 'PluschatMain',
     'db_user' => getenv('PLUSCHAT_DB_USER') ?: 'Admin',
     'db_password' => getenv('PLUSCHAT_DB_PASSWORD') ?: '',
     'base_url' => getenv('PLUSCHAT_BASE_URL') ?: 'https://xn--80avljg2a1c.xn--p1ai',
