@@ -1,0 +1,27 @@
+name: Gateway PHP checks
+
+on:
+  push:
+    branches: [main, gateway-rebuild]
+  pull_request:
+    branches: [main]
+
+jobs:
+  php-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: pdo_mysql, mbstring
+      - name: Lint PHP files
+        run: |
+          set -e
+          find . -type f -name '*.php' -print0 | xargs -0 -n1 php -l
+      - name: Check required files
+        run: |
+          test -f index.php
+          test -f config.example.php
+          test -f schema.sql
+          test -f .htaccess
