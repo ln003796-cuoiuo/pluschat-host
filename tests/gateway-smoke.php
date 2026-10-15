@@ -84,6 +84,10 @@ $friendUsername = 'friend_' . bin2hex(random_bytes(3));
 $db->prepare('INSERT INTO users(email,password_hash,first_name,last_name,username,email_verified_at) VALUES(?,?,?,?,?,UTC_TIMESTAMP())')
    ->execute([$friendEmail,password_hash('FriendPass123!', PASSWORD_DEFAULT),'Test','Friend',$friendUsername]);
 $friendId = (int)$db->lastInsertId();
+$outsiderEmail = 'outsider-' . bin2hex(random_bytes(3)) . '@example.test';
+$outsiderUsername = 'outsider_' . bin2hex(random_bytes(3));
+$db->prepare('INSERT INTO users(email,password_hash,first_name,last_name,username,email_verified_at) VALUES(?,?,?,?,?,UTC_TIMESTAMP())')
+   ->execute([$outsiderEmail,password_hash('OutsiderPass123!', PASSWORD_DEFAULT),'Outside','User',$outsiderUsername]);
 
 $rotated = api('POST','auth/token/refresh',['refresh_token'=>$refresh]);
 $newAccess = (string)$rotated['body']['access_token'];
@@ -110,8 +114,8 @@ api('POST','notifications/read-all',[],$access);
 $chat = api('POST','chats',['type'=>'direct','user_id'=>$friendId],$access);
 $chatId = (string)($chat['body']['chat_id'] ?? $chat['body']['id'] ?? '');
 check($chatId !== '', 'direct chat creation returns chat ID');
-$friendLogin = api('POST','auth/login',['identifier'=>$friendEmail,'password'=>'FriendPass123!']);
-api('GET','chats/' . $chatId . '/messages?limit=50',null,(string)$friendLogin['body']['access_token'],[404]);
+$outsiderLogin = api('POST','auth/login',['identifier'=>$outsiderEmail,'password'=>'OutsiderPass123!']);
+api('GET','chats/' . $chatId . '/messages?limit=50',null,(string)$outsiderLogin['body']['access_token'],[404]);
 $messageId = '123e4567-e89b-12d3-a456-426614174000';
 api('POST','chats/' . $chatId . '/messages',['client_message_id'=>$messageId,'type'=>'text','body'=>'Gateway smoke test'], $access);
 $history = api('GET','chats/' . $chatId . '/messages?limit=50',null,$access);
