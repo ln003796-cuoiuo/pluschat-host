@@ -157,11 +157,14 @@ if ($method === 'POST' && $route === 'auth/registration/email/verify') {
 if ($method === 'POST' && $route === 'auth/registration/complete') {
     $phoneId = trim((string)($data['challenge_id'] ?? ''));
     $emailId = trim((string)($data['email_challenge_id'] ?? ''));
-    $phoneQ = $db->prepare("SELECT * FROM auth_challenges WHERE id=? AND kind='phone' AND verified_at IS NOT NULL AND expires_at>UTC_TIMESTAMP() LIMIT 1");
-    $phoneQ->execute([$phoneId]); $phone = $phoneQ->fetch();
+    $phone = null;
+    if ($phoneId !== '') {
+        $phoneQ = $db->prepare("SELECT * FROM auth_challenges WHERE id=? AND kind='phone' AND verified_at IS NOT NULL AND expires_at>UTC_TIMESTAMP() LIMIT 1");
+        $phoneQ->execute([$phoneId]); $phone = $phoneQ->fetch();
+    }
     $emailQ = $db->prepare("SELECT * FROM auth_challenges WHERE id=? AND kind='email' AND verified_at IS NOT NULL AND expires_at>UTC_TIMESTAMP() LIMIT 1");
     $emailQ->execute([$emailId]); $email = $emailQ->fetch();
-    if (!$phone || !$email || $email['parent_challenge_id'] !== $phoneId) fail(400, 'verification_required', 'Подтверди телефон и email перед созданием аккаунта.');
+    if (!$email || ($phoneId !== '' && (!$phone || $email['parent_challenge_id'] !== $phoneId))) fail(400, 'verification_required', 'Подтверди email перед созданием аккаунта.');
     $fn = trim((string)($data['first_name'] ?? '')); $ln = trim((string)($data['last_name'] ?? ''));
     $username = ltrim(trim((string)($data['username'] ?? '')), '@');
     $password = (string)($data['password'] ?? '');
@@ -172,14 +175,15 @@ if ($method === 'POST' && $route === 'auth/registration/complete') {
     $birth = $birth === '' ? null : $birth;
     try {
         $stmt = $db->prepare('INSERT INTO users (phone,email,password_hash,first_name,last_name,username,bio,birth_date,education,email_verified_at) VALUES (?,?,?,?,?,?,?,?,?,UTC_TIMESTAMP())');
-        $stmt->execute([$phone['destination'], $email['destination'], password_hash($password, PASSWORD_DEFAULT), $fn, $ln, $username, mb_substr(trim((string)($data['bio'] ?? '')),0,500), $birth, mb_substr(trim((string)($data['education'] ?? '')),0,160)]);
+        $stmt->execute([$phone ? $phone['destination'] : null, $email['destination'], password_hash($password, PASSWORD_DEFAULT), $fn, $ln, $username, mb_substr(trim((string)($data['bio'] ?? '')),0,500), $birth, mb_substr(trim((string)($data['education'] ?? '')),0,160)]);
     } catch (PDOException $e) {
         if ((string)$e->getCode() === '23000') fail(409, 'account_exists', 'Телефон, email или username уже заняты.');
         throw $e;
     }
     $userId = (int)$db->lastInsertId();
     $stmt = $db->prepare('SELECT * FROM users WHERE id=?'); $stmt->execute([$userId]); $user = $stmt->fetch();
-    $db->prepare('DELETE FROM auth_challenges WHERE id IN (?,?)')->execute([$phoneId,$emailId]);
+    if ($phoneId !== '') $db->prepare('DELETE FROM auth_challenges WHERE id=?')->execute([$phoneId]);
+    $db->prepare('DELETE FROM auth_challenges WHERE id=?')->execute([$emailId]);
     respond(201, ['user'=>user_public($user)] + create_session($db, $userId, $config));
 }
 if ($method === 'POST' && $route === 'auth/login') {
