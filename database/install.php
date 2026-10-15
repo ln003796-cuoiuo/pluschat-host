@@ -66,6 +66,14 @@ try {
         if ((int)$description->fetchColumn() === 0) $db->exec('ALTER TABLE chats ADD COLUMN description TEXT NULL AFTER title');
     }
 
+    $membersTable = $db->prepare("SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=? AND TABLE_NAME='chat_members'");
+    $membersTable->execute([$config['db_name']]);
+    if ((int)$membersTable->fetchColumn() > 0) {
+        $roleColumn = $db->prepare("SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=? AND TABLE_NAME='chat_members' AND COLUMN_NAME='role'");
+        $roleColumn->execute([$config['db_name']]);
+        if ((int)$roleColumn->fetchColumn() === 0) $db->exec("ALTER TABLE chat_members ADD COLUMN role VARCHAR(20) NOT NULL DEFAULT 'member' AFTER user_id");
+    }
+
     $schemaPath = __DIR__ . '/schema.sql';
     $schema = file_get_contents($schemaPath);
     if ($schema === false) throw new RuntimeException('schema.sql is missing');
