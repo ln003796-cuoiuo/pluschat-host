@@ -12,3 +12,5 @@ storage/logs/
 *.p12
 .idea/
 .vscode/
+
+/config.php
