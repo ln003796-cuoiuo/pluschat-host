@@ -49,5 +49,40 @@ function pc_register_dispatch(string $path, string $method): bool
         pc_json(200, ['ok' => true, 'message' => 'Если аккаунт существует и ещё не подтверждён, письмо будет отправлено.']);
     }
 
+
+    if ($path === '/api/v1/auth/phone/verify' && $method === 'POST') {
+        pc_rate_limit('verify-phone-code', 10, 900);
+        $data = pc_input();
+        $phone = is_string($data['phone'] ?? null) ? preg_replace('/[\\s().-]+/', '', trim($data['phone'])) : '';
+        $code = pc_string($data, 'code');
+        if (!preg_match('/^\\+[1-9][0-9]{7,14}$/', $phone) || !preg_match('/^[0-9]{6}$/', $code)) {
+            pc_json(422, ['ok' => false, 'error' => 'invalid_phone_or_code', 'message' => 'Укажи номер в международном формате и шестизначный код из SMS.']);
+        }
+        if (!PCRegistrationRepository::confirmPhoneCode(pc_db(), $phone, $code)) {
+            pc_json(400, ['ok' => false, 'error' => 'invalid_or_expired_phone_code', 'message' => 'Код неверный, истёк или превышено число попыток. Запроси новый код.']);
+        }
+        pc_json(200, ['ok' => true, 'verified' => true, 'message' => 'Номер телефона подтверждён. Теперь подтверди email.']);
+    }
+
+    if ($path === '/api/v1/auth/phone/resend' && $method === 'POST') {
+        pc_rate_limit('resend-phone-code', 3, 900);
+        $data = pc_input();
+        $phone = is_string($data['phone'] ?? null) ? preg_replace('/[\\s().-]+/', '', trim($data['phone'])) : '';
+        if (!preg_match('/^\\+[1-9][0-9]{7,14}$/', $phone)) {
+            pc_json(422, ['ok' => false, 'error' => 'invalid_phone']);
+        }
+        $result = PCRegistrationRepository::replacePhoneCode(pc_db(), $phone);
+        if (is_array($result) && !empty($result['cooldown'])) {
+            pc_json(429, ['ok' => false, 'error' => 'sms_resend_cooldown', 'message' => 'Подожди 60 секунд перед повторной отправкой.']);
+        }
+        if (is_array($result) && isset($result['code'])) {
+            $sent = PCTextBeeService::send($phone, 'Код подтверждения Pluschat: ' . $result['code'] . '. Действует 10 минут. Никому не сообщайте этот код.');
+            if (!$sent) {
+                pc_json(502, ['ok' => false, 'error' => 'sms_delivery_failed', 'message' => 'TextBee не принял SMS. Проверь подключённый телефон, разрешение SMS и лимит.']);
+            }
+        }
+        pc_json(200, ['ok' => true, 'message' => 'Если номер зарегистрирован и не подтверждён, код отправлен.']);
+    }
+
     return false;
 }
