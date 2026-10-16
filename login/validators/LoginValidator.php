@@ -10,6 +10,12 @@ final class PCLoginValidator
             $login = strtolower(is_string($data['email'] ?? null) ? trim($data['email']) : '');
         }
         $password = is_string($data['password'] ?? null) ? $data['password'] : '';
+        if ($login === '' || pc_len($login) > 254) {
+            return ['error' => 'invalid_login'];
+        }
+        if ($password === '' || strlen($password) > 200) {
+            return ['error' => 'invalid_password'];
+        }
         $deviceKey = is_string($data['device_key'] ?? null) ? trim($data['device_key']) : '';
         $deviceName = is_string($data['device_name'] ?? null) ? trim($data['device_name']) : '';
         $platform = is_string($data['platform'] ?? null) ? trim($data['platform']) : '';
