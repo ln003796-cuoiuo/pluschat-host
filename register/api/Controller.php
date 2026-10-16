@@ -11,15 +11,24 @@ function pc_register_dispatch(string $path, string $method): bool
         pc_json($result['status'], $result['body']);
     }
 
-    if ($path === '/api/v1/auth/verify' && ($method === 'GET' || $method === 'POST')) {
-        $data = $method === 'POST' ? pc_input() : [];
-        $token = $method === 'POST'
-            ? (is_string($data['token'] ?? null) ? trim($data['token']) : '')
-            : (string)($_GET['token'] ?? '');
-        if (!preg_match('/^[a-f0-9]{64}$/i', $token)) {
-            pc_json(400, ['ok' => false, 'error' => 'invalid_verification_token']);
+    if ($path === '/api/v1/auth/verify' && $method === 'POST') {
+        pc_rate_limit('verify-email-code', 10, 900);
+        $data = pc_input();
+        $email = strtolower(pc_string($data, 'email'));
+        $code = pc_string($data, 'code');
+        if (!filter_var($email, FILTER_VALIDATE_EMAIL) || !preg_match('/^[0-9]{6}$/', $code)) {
+            pc_json(422, ['ok' => false, 'error' => 'invalid_email_or_code', 'message' => 'Укажи email и шестизначный код из письма.']);
         }
-        if (!PCRegistrationRepository::confirm(pc_db(), $token)) {
+        if (!PCRegistrationRepository::confirmCode(pc_db(), $email, $code)) {
+            pc_json(400, ['ok' => false, 'error' => 'invalid_or_expired_verification_code', 'message' => 'Код неверный или истёк. Запроси новый код.']);
+        }
+        pc_json(200, ['ok' => true, 'verified' => true, 'message' => 'Почта подтверждена. Теперь можно войти в Pluschat.']);
+    }
+
+    // Keep verification links sent by older server versions working.
+    if ($path === '/api/v1/auth/verify' && $method === 'GET') {
+        $token = (string)($_GET['token'] ?? '');
+        if (!preg_match('/^[a-f0-9]{64}$/i', $token) || !PCRegistrationRepository::confirm(pc_db(), $token)) {
             pc_json(400, ['ok' => false, 'error' => 'invalid_or_expired_verification_token']);
         }
         pc_json(200, ['ok' => true, 'verified' => true, 'message' => 'Почта подтверждена. Теперь можно войти в Pluschat.']);
