@@ -28,6 +28,7 @@ $required = [
     'database/migrations/004_password_recovery.sql',
     'database/migrations/005_message_hiding.sql',
     'database/migrations/006_mandatory_two_factor.sql',
+    'database/migrations/007_private_profile_avatars.sql',
     'security/services/TwoFactorService.php',
     'public/password-reset.php',
     'database/migrate.php',
