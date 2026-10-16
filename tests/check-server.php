@@ -80,6 +80,26 @@ foreach (['users', 'auth_tokens', 'conversations', 'messages', 'chat_groups', 'c
     }
 }
 
+$bootstrap = (string)file_get_contents($root . '/bootstrap.php');
+if (!str_contains($bootstrap, 'function pc_encrypted_envelope')) {
+    $errors[] = 'Missing encrypted-envelope validation';
+}
+foreach (['messages/api/Controller.php', 'groups/api/Controller.php', 'channels/api/Controller.php', 'topics/validators/TopicValidator.php'] as $relative) {
+    $source = (string)file_get_contents($root . '/' . $relative);
+    if (!str_contains($source, 'pc_encrypted_envelope')) {
+        $errors[] = 'Encrypted-message enforcement missing in: ' . $relative;
+    }
+}
+foreach (['calls/api/Controller.php', 'calls/services/CallService.php', 'security/api/Controller.php'] as $relative) {
+    $source = (string)file_get_contents($root . '/' . $relative);
+    if ($source === '') $errors[] = 'Empty security/calls module: ' . $relative;
+}
+foreach (explode("\n", $schema) as $lineNumber => $line) {
+    if (str_starts_with(trim($line), '--') && str_contains($line, ';')) {
+        $errors[] = 'SQL installer may split a comment at line ' . ($lineNumber + 1);
+    }
+}
+
 if ($errors) {
     fwrite(STDERR, "Pluschat server check FAILED (" . count($errors) . " issue(s)):\n");
     foreach ($errors as $error) fwrite(STDERR, " - " . $error . "\n");
