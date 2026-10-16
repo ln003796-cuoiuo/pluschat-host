@@ -5,12 +5,9 @@ final class PCTopicValidator
 {
     public static function message(array $input): array
     {
-        $body = is_string($input['body'] ?? null) ? trim($input['body']) : '';
-        if ($body === '' || pc_len($body) > 4000) return ['error' => 'message_must_be_1_to_4000_characters'];
-        return [
-            'body' => $body,
-            'encrypted' => filter_var($input['encrypted'] ?? false, FILTER_VALIDATE_BOOLEAN) ? 1 : 0,
-        ];
+        $envelope = pc_encrypted_envelope($input['body'] ?? null);
+        if (!$envelope) return ['error' => 'encrypted_message_envelope_required'];
+        return ['body' => $envelope['body'], 'encrypted' => 1, 'encryption_version' => $envelope['version']];
     }
 
     public static function limit(mixed $value): int
