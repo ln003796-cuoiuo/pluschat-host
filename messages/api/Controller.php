@@ -114,6 +114,7 @@ function pc_messages_dispatch(string $path, string $method): bool
     }
 
     if (preg_match('#^/api/v1/messages/([0-9]+)/reactions$#', $path, $matches) && $method === 'POST') {
+        pc_rate_limit('message-reaction', 120, 60);
         $user = pc_require_verified_user();
         $data = pc_input();
         $reaction = is_string($data['reaction'] ?? null) ? trim($data['reaction']) : '';
@@ -122,6 +123,7 @@ function pc_messages_dispatch(string $path, string $method): bool
     }
 
     if (preg_match('#^/api/v1/messages/([0-9]+)/reactions/remove$#', $path, $matches) && $method === 'POST') {
+        pc_rate_limit('message-reaction', 120, 60);
         $user = pc_require_verified_user();
         $data = pc_input();
         $reaction = is_string($data['reaction'] ?? null) ? trim($data['reaction']) : '';
