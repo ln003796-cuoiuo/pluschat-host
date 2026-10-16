@@ -79,6 +79,28 @@ $cleanupRunner = (string)file_get_contents($root . '/database/cleanup.php');
 if (!str_contains($migrationRunner, "PHP_SAPI !== 'cli'")) $errors[] = 'Migration runner must refuse web requests';
 if (!str_contains($cleanupRunner, "PHP_SAPI !== 'cli'")) $errors[] = 'Cleanup runner must refuse web requests';
 
+// Exercise the RFC 6238 verifier with a freshly computed valid TOTP code.
+require_once $root . '/security/services/TwoFactorService.php';
+$totpSecret = 'JBSWY3DPEHPK3PXP';
+$alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+$bits = '';
+foreach (str_split($totpSecret) as $character) $bits .= str_pad(decbin(strpos($alphabet, $character)), 5, '0', STR_PAD_LEFT);
+$totpKey = '';
+foreach (str_split($bits, 8) as $chunk) if (strlen($chunk) === 8) $totpKey .= chr(bindec($chunk));
+$counter = intdiv(time(), 30);
+$counterBytes = pack('N2', intdiv($counter, 4294967296), $counter % 4294967296);
+$totpHash = hash_hmac('sha1', $counterBytes, $totpKey, true);
+$offset = ord($totpHash[19]) & 0x0f;
+$binary = ((ord($totpHash[$offset]) & 0x7f) << 24)
+    | ((ord($totpHash[$offset + 1]) & 0xff) << 16)
+    | ((ord($totpHash[$offset + 2]) & 0xff) << 8)
+    | (ord($totpHash[$offset + 3]) & 0xff);
+$validTotp = str_pad((string)($binary % 1000000), 6, '0', STR_PAD_LEFT);
+$totpVerifier = new ReflectionMethod(PCTwoFactorService::class, 'verifyCode');
+$totpVerifier->setAccessible(true);
+if (!$totpVerifier->invoke(null, $totpSecret, $validTotp, time())) $errors[] = 'TOTP verifier rejected a valid RFC 6238 code';
+if ($totpVerifier->invoke(null, $totpSecret, 'ABC123', time())) $errors[] = 'TOTP verifier accepted an invalid code';
+
 if ($errors) {
     fwrite(STDERR, implode(PHP_EOL, $errors) . PHP_EOL);
     exit(1);
