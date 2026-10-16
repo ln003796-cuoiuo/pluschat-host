@@ -14,6 +14,9 @@ final class PCLoginValidator
         $deviceName = is_string($data['device_name'] ?? null) ? trim($data['device_name']) : '';
         $platform = is_string($data['platform'] ?? null) ? trim($data['platform']) : '';
 
+        if ($deviceKey === '') {
+            return ['error' => 'device_binding_required'];
+        }
         if ($deviceKey !== '' && (
             !preg_match('/^[a-f0-9]{32,128}$/i', $deviceKey)
             || pc_len($deviceName ?: 'Unknown device') > 120
