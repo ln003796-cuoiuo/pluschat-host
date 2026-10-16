@@ -1,3 +1,10 @@
+## Registration and email verification
+- `POST /api/v1/auth/register` requires `email`, `username`, `password`, and a non-empty `first_name`; `last_name` and `birth_date` are optional.
+- A six-digit one-time code is sent to the registered email. Codes expire after 15 minutes and are stored only as a SHA-256 hash bound to the normalized email address.
+- `POST /api/v1/auth/verify` accepts `email` and `code`. Login remains blocked until email verification succeeds.
+- `POST /api/v1/auth/resend-verification` sends a replacement code for an unverified account. Responses intentionally do not reveal whether the email belongs to an account.
+- Email delivery uses PHP `mail()`; the hosting provider must have outbound mail configured and the sender domain should have valid SPF/DKIM/DMARC records. A successful CI run does not verify real-world email delivery.
+
 # Pluschat API feature notes
 
 Friend requests, saved messages, and polls are implemented as separate PHP modules.
