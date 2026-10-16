@@ -10,7 +10,7 @@ RewriteRule ^(?:admin|password|calls|channels|chats|chatprefs|files|stories|frie
 RewriteRule ^(?:bootstrap\.php|config(?:\.example)?\.php|database(?:/|$)|storage(?:/|$)|\.git(?:/|$)) - [F,L,NC]
 
 # Expose the one-time installer and password recovery page.
-RewriteRule ^password-reset\\.php$ public/password-reset.php [QSA,L]
+RewriteRule ^password-reset\.php$ public/password-reset.php [QSA,L]
 
 # Expose the one-time installer at /setup.php while keeping it disabled after config.php exists.
 RewriteRule ^setup\.php$ public/setup.php [QSA,L]
