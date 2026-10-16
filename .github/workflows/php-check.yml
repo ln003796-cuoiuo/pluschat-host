@@ -1,0 +1,35 @@
+name: Pluschat PHP checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  php-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: pdo_mysql
+          coverage: none
+      - name: Check PHP syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          while IFS= read -r file; do
+            php -l "$file"
+          done < <(find . -type f -name '*.php' -not -path './vendor/*' | sort)
+      - name: Check required schema tables
+        shell: bash
+        run: |
+          set -euo pipefail
+          for table in users email_verification_tokens auth_tokens conversations conversation_members messages; do
+            grep -Eq "CREATE TABLE IF NOT EXISTS ${table}[[:space:]]*\\(" database/schema.sql
+          done
