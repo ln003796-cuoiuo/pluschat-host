@@ -38,7 +38,7 @@ final class PCChatRepository
             $pdo->exec('INSERT INTO conversations () VALUES ()');
             $conversationId = (int)$pdo->lastInsertId();
             $member = $pdo->prepare('INSERT INTO conversation_members (conversation_id, user_id) VALUES (?, ?)');
-            $member->execute([$userId === $recipientId ? $conversationId : $conversationId, $userId]);
+            $member->execute([$conversationId, $userId]);
             $member->execute([$conversationId, $recipientId]);
             $pdo->commit();
             return $conversationId;

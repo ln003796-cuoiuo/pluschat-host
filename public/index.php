@@ -49,20 +49,6 @@ function pc_public_user(array $user): array {
     ];
 }
 
-function pc_send_verification(string $email, string $username, string $token): bool {
-    $baseUrl = rtrim((string)pc_config('app_base_url', 'https://xn--80avljg2a1c.xn--p1ai'), '/');
-    $from = (string)pc_config('mail_from', 'register@плюсчат.рф');
-    $link = $baseUrl . '/api/v1/auth/verify?token=' . rawurlencode($token);
-    $subject = 'Подтверждение почты Pluschat';
-    $body = "Здравствуйте, {$username}!\n\nПодтвердите адрес электронной почты для Pluschat по ссылке:\n{$link}\n\nСсылка действует 24 часа. Если вы не регистрировались, просто проигнорируйте это письмо.";
-    $headers = [
-        'From: Pluschat <' . $from . '>',
-        'Content-Type: text/plain; charset=UTF-8',
-        'X-Mailer: Pluschat PHP',
-    ];
-    return @mail($email, '=?UTF-8?B?' . base64_encode($subject) . '?=', $body, implode("\r\n", $headers));
-}
-
 function pc_require_verified_user(): array {
     return pc_token_user();
 }
@@ -88,7 +74,9 @@ try {
         ]);
     }
 
-    // Feature-based API modules. Each module owns its routes; unmatched requests continue.
+    // Load and dispatch each feature module independently.
+    require_once dirname(__DIR__) . '/register/api/Controller.php';
+    require_once dirname(__DIR__) . '/login/api/Controller.php';
     require_once dirname(__DIR__) . '/notifications/api/Controller.php';
     require_once dirname(__DIR__) . '/profile/api/Controller.php';
     require_once dirname(__DIR__) . '/users/api/Controller.php';
@@ -101,6 +89,9 @@ try {
     require_once dirname(__DIR__) . '/api/integrations/calls/api/Controller.php';
     require_once dirname(__DIR__) . '/admin/api/Controller.php';
     require_once dirname(__DIR__) . '/files/api/Controller.php';
+
+    if (pc_register_dispatch($path, $method)) { exit; }
+    if (pc_login_dispatch($path, $method)) { exit; }
     if (pc_notifications_dispatch($path, $method)) { exit; }
     if (pc_profile_dispatch($path, $method)) { exit; }
     if (pc_users_dispatch($path, $method)) { exit; }
@@ -113,16 +104,6 @@ try {
     if (pc_calls_integration_dispatch($path, $method)) { exit; }
     if (pc_admin_dispatch($path, $method)) { exit; }
     if (pc_files_dispatch($path, $method)) { exit; }
-
-
-    require_once dirname(__DIR__) . '/register/api/Controller.php';
-    require_once dirname(__DIR__) . '/login/api/Controller.php';
-    if (pc_register_dispatch($path, $method)) {
-        exit;
-    }
-    if (pc_login_dispatch($path, $method)) {
-        exit;
-    }
 
     pc_json(404, ['ok' => false, 'error' => 'endpoint_not_found', 'path' => $path]);
 } catch (PDOException $e) {
