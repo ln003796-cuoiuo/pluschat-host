@@ -77,6 +77,7 @@ try {
     // Load and dispatch each feature module independently.
     require_once dirname(__DIR__) . '/register/api/Controller.php';
     require_once dirname(__DIR__) . '/login/api/Controller.php';
+    require_once dirname(__DIR__) . '/search/api/Controller.php';
     require_once dirname(__DIR__) . '/notifications/api/Controller.php';
     require_once dirname(__DIR__) . '/profile/api/Controller.php';
     require_once dirname(__DIR__) . '/users/api/Controller.php';
@@ -92,6 +93,7 @@ try {
 
     if (pc_register_dispatch($path, $method)) { exit; }
     if (pc_login_dispatch($path, $method)) { exit; }
+    if (pc_search_dispatch($path, $method)) { exit; }
     if (pc_notifications_dispatch($path, $method)) { exit; }
     if (pc_profile_dispatch($path, $method)) { exit; }
     if (pc_users_dispatch($path, $method)) { exit; }
