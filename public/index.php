@@ -71,12 +71,41 @@ try {
     }
 
     if ($path === '/api/v1/health' && $method === 'GET') {
-        pc_db()->query('SELECT 1')->fetchColumn();
+        $pdo = pc_db();
+        $pdo->query('SELECT 1')->fetchColumn();
+        $requiredTables = [
+            'users', 'email_verification_tokens', 'auth_tokens', 'conversations',
+            'conversation_members', 'messages', 'user_settings', 'user_devices',
+            'user_blocks', 'chat_groups', 'group_members', 'channels',
+            'channel_members', 'topics', 'topic_messages', 'message_attachments',
+            'message_receipts', 'message_reactions', 'reports', 'admin_users',
+            'notifications', 'group_messages', 'channel_posts', 'api_rate_limits',
+            'user_crypto_keys', 'calls', 'call_signals',
+        ];
+        $stmt = $pdo->prepare(
+            'SELECT COUNT(*) FROM information_schema.tables
+             WHERE table_schema = DATABASE() AND table_name = ?'
+        );
+        $missing = [];
+        foreach ($requiredTables as $table) {
+            $stmt->execute([$table]);
+            if ((int)$stmt->fetchColumn() !== 1) $missing[] = $table;
+        }
+        if ($missing !== []) {
+            pc_json(503, [
+                'ok' => false,
+                'service' => 'pluschat-api',
+                'database' => 'connected',
+                'schema' => 'incomplete',
+                'missing_table_count' => count($missing),
+            ]);
+        }
         pc_json(200, [
             'ok' => true,
             'service' => 'pluschat-api',
             'api_version' => 1,
             'database' => 'connected',
+            'schema' => 'ready',
         ]);
     }
 
