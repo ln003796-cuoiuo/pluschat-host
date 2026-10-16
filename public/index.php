@@ -89,6 +89,7 @@ try {
     }
 
     if ($path === '/api/v1/auth/register' && $method === 'POST') {
+        pc_rate_limit('register', 5, 3600);
         $data = pc_input();
         $email = strtolower(pc_string($data, 'email'));
         $username = pc_string($data, 'username');
@@ -170,6 +171,7 @@ try {
     }
 
     if ($path === '/api/v1/auth/resend-verification' && $method === 'POST') {
+        pc_rate_limit('resend-verification', 3, 3600);
         $email = strtolower(pc_string(pc_input(), 'email'));
         if (!filter_var($email, FILTER_VALIDATE_EMAIL)) pc_json(422, ['ok' => false, 'error' => 'invalid_email']);
         $pdo = pc_db();
@@ -187,9 +189,11 @@ try {
     }
 
     if ($path === '/api/v1/auth/login' && $method === 'POST') {
+        pc_rate_limit('login-ip', 30, 900);
         $data = pc_input();
         $login = strtolower(pc_string($data, 'login'));
         if ($login === '') $login = strtolower(pc_string($data, 'email'));
+        pc_rate_limit('login-account-' . hash('sha256', $login), 8, 900);
         $password = is_string($data['password'] ?? null) ? $data['password'] : '';
         $deviceKey = pc_string($data, 'device_key');
         $deviceName = pc_string($data, 'device_name') ?: 'Unknown device';
