@@ -80,7 +80,7 @@ try {
             'channel_members', 'topics', 'topic_messages', 'message_attachments',
             'message_receipts', 'message_reactions', 'reports', 'admin_users',
             'notifications', 'group_messages', 'channel_posts', 'api_rate_limits',
-            'user_crypto_keys', 'calls', 'call_signals', 'friend_requests', 'friendships', 'saved_messages', 'polls', 'poll_options', 'poll_votes', 'chat_preferences', 'chat_folders', 'chat_folder_items',
+            'user_crypto_keys', 'calls', 'call_signals', 'friend_requests', 'friendships', 'saved_messages', 'polls', 'poll_options', 'poll_votes', 'chat_preferences', 'chat_folders', 'chat_folder_items', 'chat_preferences',
         ];
         $stmt = $pdo->prepare(
             'SELECT COUNT(*) FROM information_schema.tables
@@ -128,6 +128,7 @@ try {
     require_once dirname(__DIR__) . '/friends/api/Controller.php';
     require_once dirname(__DIR__) . '/saved/api/Controller.php';
     require_once dirname(__DIR__) . '/polls/api/Controller.php';
+    require_once dirname(__DIR__) . '/chatprefs/api/Controller.php';
 
     if (pc_register_dispatch($path, $method)) { exit; }
     if (pc_login_dispatch($path, $method)) { exit; }
@@ -147,6 +148,7 @@ try {
     if (pc_friends_dispatch($path, $method)) { exit; }
     if (pc_saved_dispatch($path, $method)) { exit; }
     if (pc_polls_dispatch($path, $method)) { exit; }
+    if (pc_chatprefs_dispatch($path, $method)) { exit; }
 
     pc_json(404, ['ok' => false, 'error' => 'endpoint_not_found', 'path' => $path]);
 } catch (PDOException $e) {
