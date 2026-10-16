@@ -57,25 +57,7 @@ function pc_misc_api_dispatch(string $path, string $method): bool
             pc_json(405, ['ok' => false, 'error' => 'method_not_allowed']);
         }
 
-    if (preg_match('#^/api/v1/devices/([0-9]+)/revoke$#', $path, $matches) && $method === 'POST') {
-            $user = pc_require_verified_user();
-            $deviceId = (int)$matches[1];
-            $stmt = pc_db()->prepare('SELECT device_key_hash FROM user_devices WHERE id = ? AND user_id = ? AND revoked_at IS NULL LIMIT 1');
-            $stmt->execute([$deviceId, $user['id']]);
-            $device = $stmt->fetch();
-            if (!$device) pc_json(404, ['ok' => false, 'error' => 'device_not_found']);
-            $pdo = pc_db();
-            $pdo->beginTransaction();
-            try {
-                $pdo->prepare('UPDATE user_devices SET revoked_at = UTC_TIMESTAMP() WHERE id = ? AND user_id = ?')->execute([$deviceId, $user['id']]);
-                $pdo->prepare('DELETE FROM auth_tokens WHERE user_id = ? AND device_key_hash = ?')->execute([$user['id'], $device['device_key_hash']]);
-                $pdo->commit();
-            } catch (Throwable $e) {
-                if ($pdo->inTransaction()) $pdo->rollBack();
-                throw $e;
-            }
-            pc_json(200, ['ok' => true, 'revoked' => true]);
-        }
+    
 
     
 
