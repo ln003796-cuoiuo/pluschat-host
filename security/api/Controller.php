@@ -7,9 +7,47 @@ declare(strict_types=1);
  * are loaded by public/index.php through bootstrap.php.
  */
 require_once dirname(__DIR__) . '/services/DeviceService.php';
+require_once dirname(__DIR__) . '/services/TwoFactorService.php';
 
 function pc_security_dispatch(string $path, string $method): bool
 {
+    if ($path === '/api/v1/auth/2fa/setup' && $method === 'POST') {
+        pc_rate_limit('two-factor-setup', 5, 3600);
+        $user = pc_token_user(true);
+        $pdo = pc_db();
+        if (PCTwoFactorService::isEnabled($pdo, (int)$user['id'])) {
+            pc_json(409, ['ok' => false, 'error' => 'two_factor_already_enabled']);
+        }
+        $setup = PCTwoFactorService::beginSetup($pdo, (int)$user['id'], (string)($user['email'] ?? $user['username'] ?? ''));
+        pc_json(200, ['ok' => true] + $setup);
+    }
+
+    if ($path === '/api/v1/auth/2fa/confirm' && $method === 'POST') {
+        pc_rate_limit('two-factor-confirm', 10, 900);
+        $user = pc_token_user(true);
+        $data = pc_input();
+        $setupId = pc_string($data, 'setup_id');
+        $code = pc_string($data, 'code');
+        if (!PCTwoFactorService::confirmSetup(pc_db(), (int)$user['id'], $setupId, $code)) {
+            pc_json(400, ['ok' => false, 'error' => 'invalid_or_expired_two_factor_code', 'message' => 'Код неверный или истёк. Синхронизируй время на телефоне и попробуй снова.']);
+        }
+        pc_json(200, ['ok' => true, 'enabled' => true, 'message' => 'Двухэтапная аутентификация включена.']);
+    }
+
+    if ($path === '/api/v1/auth/2fa/verify' && $method === 'POST') {
+        pc_rate_limit('two-factor-verify', 10, 900);
+        $data = pc_input();
+        $result = PCTwoFactorService::verifyChallenge(pc_db(), pc_string($data, 'challenge_id'), pc_string($data, 'code'));
+        if ($result === null) {
+            pc_json(401, ['ok' => false, 'error' => 'invalid_or_expired_two_factor_challenge', 'message' => 'Код неверный или запрос входа истёк. Войди заново.']);
+        }
+        pc_json(200, ['ok' => true] + $result);
+    }
+
+    if ($path === '/api/v1/auth/2fa/disable' && $method === 'POST') {
+        pc_require_verified_user();
+        pc_json(403, ['ok' => false, 'error' => 'two_factor_is_mandatory', 'message' => 'Двухэтапная аутентификация обязательна для Pluschat.']);
+    }
 
     if ($path === '/api/v1/security/keys' && $method === 'POST') {
         $user = pc_require_verified_user();
