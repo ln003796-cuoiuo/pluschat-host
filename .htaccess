@@ -4,7 +4,7 @@ DirectoryIndex public/index.php
 RewriteEngine On
 
 # Feature PHP files are included by public/index.php and must not be called directly.
-RewriteRule ^(?:admin|calls|channels|chats|files|groups|login|messages|notifications|profile|register|search|security|topics|users|tests|api/integrations)/.*\.php$ - [F,L,NC]
+RewriteRule ^(?:admin|calls|channels|chats|files|friends|groups|login|messages|notifications|polls|profile|register|saved|search|security|topics|users|tests|api/integrations)/.*\.php$ - [F,L,NC]
 
 # Keep source, configuration and database files out of public access.
 RewriteRule ^(?:bootstrap\.php|config(?:\.example)?\.php|database(?:/|$)|storage(?:/|$)|\.git(?:/|$)) - [F,L,NC]
