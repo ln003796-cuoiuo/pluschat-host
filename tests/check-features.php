@@ -36,7 +36,7 @@ foreach ($required as $file) {
     if (!is_file($root . '/' . $file)) $errors[] = 'Missing file: ' . $file;
 }
 $schema = (string)file_get_contents($root . '/database/schema.sql');
-foreach (['friend_requests','friendships','saved_messages','polls','poll_options','poll_votes','chat_preferences','chat_folders','chat_folder_items','stories','story_views','password_reset_tokens','message_hidden'] as $table) {
+foreach (['friend_requests','friendships','saved_messages','polls','poll_options','poll_votes','chat_preferences','chat_folders','chat_folder_items','stories','story_views','password_reset_tokens','message_hidden','user_two_factor','two_factor_setups','two_factor_challenges'] as $table) {
     if (strpos($schema, 'CREATE TABLE IF NOT EXISTS ' . $table) === false) $errors[] = 'Missing table: ' . $table;
 }
 $index = (string)file_get_contents($root . '/public/index.php');
