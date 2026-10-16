@@ -29,6 +29,8 @@ $required = [
     'database/migrations/005_message_hiding.sql',
     'database/migrations/006_mandatory_two_factor.sql',
     'database/migrations/007_private_profile_avatars.sql',
+    'database/migrations/008_textbee_phone_verification.sql',
+    'register/services/TextBeeService.php',
     'security/services/TwoFactorService.php',
     'profile/services/AvatarService.php',
     'public/password-reset.php',
@@ -47,6 +49,10 @@ $index = (string)file_get_contents($root . '/public/index.php');
 foreach (['pc_friends_dispatch','pc_saved_dispatch','pc_polls_dispatch','pc_chatprefs_dispatch','pc_stories_dispatch','pc_password_dispatch'] as $route) {
     if (strpos($index, $route) === false) $errors[] = 'Router missing: ' . $route;
 }
+$setup = (string)file_get_contents($root . '/public/setup.php');
+if (!str_contains($setup, '008_textbee_phone_verification.sql') || !str_contains($setup, 'phone_verification_codes')) $errors[] = 'Installer must apply and verify phone verification migration';
+$textBee = (string)file_get_contents($root . '/register/services/TextBeeService.php');
+if (!str_contains($textBee, 'PLUSCHAT_TEXTBEE_API_KEY') || !str_contains($textBee, 'x-api-key')) $errors[] = 'TextBee must read its key privately and authenticate SMS requests';
 $registrationValidator = (string)file_get_contents($root . '/register/validators/RegistrationValidator.php');
 if (!str_contains($registrationValidator, 'invalid_phone')) $errors[] = 'Registration must validate phone number';
 if (!str_contains($registrationValidator, 'first_name_required')) $errors[] = 'Registration must require first name';
