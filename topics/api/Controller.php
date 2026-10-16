@@ -7,6 +7,7 @@ function pc_topics_dispatch(string $path, string $method): bool
 {
     if (preg_match('#^/api/v1/topics/([0-9]+)/messages$#', $path, $matches) && ($method === 'GET' || $method === 'POST')) {
         $user = pc_require_verified_user();
+        if ($method === 'POST') pc_rate_limit('topic-message-send', 90, 60);
         $result = PCTopicService::messages((int)$user['id'], (int)$matches[1], $method, $_GET, $method === 'POST' ? pc_input() : []);
         pc_json($result['status'], $result['body']);
     }
