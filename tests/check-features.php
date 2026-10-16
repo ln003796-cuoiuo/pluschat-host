@@ -60,6 +60,7 @@ $registrationRepository = (string)file_get_contents($root . '/register/repositor
 if (!str_contains($registrationRepository, 'confirmCode') || !str_contains($registrationRepository, 'INTERVAL 15 MINUTE')) $errors[] = 'Short-lived email verification code flow is missing';
 $registrationMailer = (string)file_get_contents($root . '/register/mail/mailconfirm/Mailer.php');
 if (!str_contains($registrationMailer, 'Код подтверждения Pluschat')) $errors[] = 'Email verification code mailer is missing';
+if (!str_contains($registrationMailer, 'text/html; charset=UTF-8') || !str_contains($registrationMailer, 'multipart/alternative') || !str_contains($registrationMailer, 'Pluschat')) $errors[] = 'Branded HTML and plain-text email alternatives are required';
 $avatarService = (string)file_get_contents($root . '/profile/services/AvatarService.php');
 if (!str_contains($avatarService, '5 * 1024 * 1024') || !str_contains($avatarService, 'image/webp')) $errors[] = 'Private avatar validation is missing';
 $profileController = (string)file_get_contents($root . '/profile/api/Controller.php');
