@@ -1,10 +1,16 @@
 Options -Indexes
 DirectoryIndex index.php
 RewriteEngine On
+
+# Configuration, schema and application internals must never be served from public.
+RewriteRule ^(?:database|app|storage|\.git)(?:/|$) - [F,L,NC]
+RewriteRule ^(?:bootstrap\.php|config(?:\.example)?\.php|\.env|composer\.(?:json|lock)|schema\.sql)$ - [F,L,NC]
+
+# Route API requests through the shared entry point.
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteCond %{REQUEST_FILENAME} !-d
 RewriteRule ^ index.php [QSA,L]
 
-<FilesMatch "^(?:\.env|config(?:\.example)?\.php|bootstrap\.php|schema\.sql)$">
+<FilesMatch "^(?:config(?:\.example)?\.php|bootstrap\.php|\.env|composer\.(?:json|lock)|schema\.sql)$">
     Require all denied
 </FilesMatch>
