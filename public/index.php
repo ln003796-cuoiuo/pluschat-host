@@ -125,6 +125,9 @@ try {
     require_once dirname(__DIR__) . '/calls/api/Controller.php';
     require_once dirname(__DIR__) . '/admin/api/Controller.php';
     require_once dirname(__DIR__) . '/files/api/Controller.php';
+    require_once dirname(__DIR__) . '/friends/api/Controller.php';
+    require_once dirname(__DIR__) . '/saved/api/Controller.php';
+    require_once dirname(__DIR__) . '/polls/api/Controller.php';
 
     if (pc_register_dispatch($path, $method)) { exit; }
     if (pc_login_dispatch($path, $method)) { exit; }
@@ -141,6 +144,9 @@ try {
     if (pc_calls_dispatch($path, $method)) { exit; }
     if (pc_admin_dispatch($path, $method)) { exit; }
     if (pc_files_dispatch($path, $method)) { exit; }
+    if (pc_friends_dispatch($path, $method)) { exit; }
+    if (pc_saved_dispatch($path, $method)) { exit; }
+    if (pc_polls_dispatch($path, $method)) { exit; }
 
     pc_json(404, ['ok' => false, 'error' => 'endpoint_not_found', 'path' => $path]);
 } catch (PDOException $e) {
