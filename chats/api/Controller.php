@@ -22,8 +22,8 @@ function pc_chats_dispatch(string $path, string $method): bool
                 'SELECT c.id, c.created_at,
                         other.id AS other_user_id, other.username AS other_username,
                         other.first_name AS other_first_name, other.last_name AS other_last_name,
-                        (SELECT m.body FROM messages m WHERE m.conversation_id = c.id ORDER BY m.id DESC LIMIT 1) AS last_message,
-                        (SELECT m.created_at FROM messages m WHERE m.conversation_id = c.id ORDER BY m.id DESC LIMIT 1) AS last_message_at
+                        (SELECT m.body FROM messages m WHERE m.conversation_id = c.id AND NOT EXISTS (SELECT 1 FROM message_hidden h WHERE h.message_id = m.id AND h.user_id = mine.user_id) ORDER BY m.id DESC LIMIT 1) AS last_message,
+                        (SELECT m.created_at FROM messages m WHERE m.conversation_id = c.id AND NOT EXISTS (SELECT 1 FROM message_hidden h WHERE h.message_id = m.id AND h.user_id = mine.user_id) ORDER BY m.id DESC LIMIT 1) AS last_message_at
                  FROM conversation_members mine
                  JOIN conversations c ON c.id = mine.conversation_id
                  JOIN conversation_members theirs ON theirs.conversation_id = c.id AND theirs.user_id <> mine.user_id
