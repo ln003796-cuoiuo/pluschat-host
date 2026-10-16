@@ -11,6 +11,8 @@ return [
     'db_user' => 'admin',
     'db_password' => '',
     'mail_from' => 'register@плюсчат.рф',
+    // Set this only in the private config.php on the server; never commit the real key.
+    'textbee_api_key' => '',
     'app_base_url' => 'https://xn--80avljg2a1c.xn--p1ai',
     'allowed_origins' => [
         'https://xn--80avljg2a1c.xn--p1ai',
