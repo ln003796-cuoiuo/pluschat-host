@@ -42,12 +42,28 @@ function pc_security_dispatch(string $path, string $method): bool
         if (!sodium_crypto_sign_verify_detached($signature, $prekey, $identity)) {
             pc_json(422, ['ok' => false, 'error' => 'invalid_signed_prekey_signature']);
         }
-        $stmt = pc_db()->prepare(
-            'INSERT INTO user_crypto_keys (user_id, device_key_hash, identity_public_key, signed_prekey, signed_prekey_signature, key_version)
-             VALUES (?, ?, ?, ?, ?, \'pc-e2ee-v1\')
-             ON DUPLICATE KEY UPDATE identity_public_key = VALUES(identity_public_key), signed_prekey = VALUES(signed_prekey), signed_prekey_signature = VALUES(signed_prekey_signature), key_version = VALUES(key_version), updated_at = UTC_TIMESTAMP()'
-        );
-        $stmt->execute([$user['id'], $deviceHash, $data['identity_public_key'], $data['signed_prekey'], $data['signed_prekey_signature']]);
+        $pdo = pc_db();
+        $pdo->beginTransaction();
+        try {
+            $existingStmt = $pdo->prepare('SELECT identity_public_key FROM user_crypto_keys WHERE user_id = ? AND device_key_hash = ? FOR UPDATE');
+            $existingStmt->execute([$user['id'], $deviceHash]);
+            $existingIdentity = $existingStmt->fetchColumn();
+            if (is_string($existingIdentity) && !hash_equals($existingIdentity, $data['identity_public_key'])) {
+                $pdo->rollBack();
+                pc_json(409, ['ok' => false, 'error' => 'identity_key_change_requires_recovery']);
+            }
+            if (is_string($existingIdentity)) {
+                $stmt = $pdo->prepare('UPDATE user_crypto_keys SET signed_prekey = ?, signed_prekey_signature = ?, key_version = \'pc-e2ee-v1\', updated_at = UTC_TIMESTAMP() WHERE user_id = ? AND device_key_hash = ?');
+                $stmt->execute([$data['signed_prekey'], $data['signed_prekey_signature'], $user['id'], $deviceHash]);
+            } else {
+                $stmt = $pdo->prepare('INSERT INTO user_crypto_keys (user_id, device_key_hash, identity_public_key, signed_prekey, signed_prekey_signature, key_version) VALUES (?, ?, ?, ?, ?, \'pc-e2ee-v1\')');
+                $stmt->execute([$user['id'], $deviceHash, $data['identity_public_key'], $data['signed_prekey'], $data['signed_prekey_signature']]);
+            }
+            $pdo->commit();
+        } catch (Throwable $e) {
+            if ($pdo->inTransaction()) $pdo->rollBack();
+            throw $e;
+        }
         pc_json(201, ['ok' => true, 'registered' => true, 'device_key_id' => $deviceHash, 'key_version' => 'pc-e2ee-v1']);
     }
 
