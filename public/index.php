@@ -4,8 +4,14 @@ declare(strict_types=1);
 require_once dirname(__DIR__) . '/bootstrap.php';
 
 header('X-Content-Type-Options: nosniff');
+header('X-Frame-Options: DENY');
 header('Referrer-Policy: no-referrer');
 header('Cache-Control: no-store');
+header('Permissions-Policy: geolocation=(), microphone=(self), camera=(self)');
+header('Cross-Origin-Opener-Policy: same-origin');
+if (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') {
+    header('Strict-Transport-Security: max-age=31536000; includeSubDomains');
+}
 
 $origin = $_SERVER['HTTP_ORIGIN'] ?? '';
 $allowedOrigins = pc_config('allowed_origins', ['https://xn--80avljg2a1c.xn--p1ai']);
