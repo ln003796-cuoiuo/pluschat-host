@@ -24,6 +24,7 @@ final class PCRegistrationRepository
                 $user['birth_date'],
             ]);
             $userId = (int)$pdo->lastInsertId();
+            $pdo->prepare('INSERT INTO user_settings (user_id) VALUES (?)')->execute([$userId]);
             $token = bin2hex(random_bytes(32));
             $verify = $pdo->prepare('INSERT INTO email_verification_tokens (user_id, token_hash, expires_at) VALUES (?, ?, DATE_ADD(UTC_TIMESTAMP(), INTERVAL 24 HOUR))');
             $verify->execute([$userId, hash('sha256', $token)]);
