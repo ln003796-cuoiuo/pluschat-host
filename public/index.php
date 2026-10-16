@@ -51,6 +51,7 @@ function pc_public_user(array $user): array {
         'last_name' => (string)($user['last_name'] ?? ''),
         'birth_date' => $user['birth_date'] ?? null,
         'email_verified' => !empty($user['email_verified_at']),
+        'phone_verified' => !empty($user['phone_verified_at']),
         'created_at' => $user['created_at'] ?? null,
     ];
 }
@@ -74,7 +75,7 @@ try {
         $pdo = pc_db();
         $pdo->query('SELECT 1')->fetchColumn();
         $requiredTables = [
-            'users', 'email_verification_tokens', 'auth_tokens', 'conversations',
+            'users', 'email_verification_tokens', 'phone_verification_codes', 'auth_tokens', 'conversations',
             'conversation_members', 'messages', 'user_settings', 'user_devices',
             'user_blocks', 'chat_groups', 'group_members', 'channels',
             'channel_members', 'topics', 'topic_messages', 'message_attachments',
