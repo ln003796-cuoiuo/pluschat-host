@@ -35,3 +35,12 @@ Existing installations must apply `database/migrations/004_password_recovery.sql
 - `POST /messages/{messageId}/edit` accepts a new encrypted message envelope. The author may edit for 48 hours.
 - `POST /messages/{messageId}/delete` accepts `for_everyone` as a boolean. Delete-for-everyone is author-only; delete-for-me hides the message only for the current user.
 - Apply `database/migrations/005_message_hiding.sql` on existing installations.
+
+## Attachments and updates
+- `POST /messages/{messageId}/attachments` accepts client-encrypted bytes only (`encrypted=1`, `encryption_version=pc-e2ee-v1`); the server stores the opaque bytes and never decrypts them.
+- `GET /attachments/{attachmentId}` downloads an attachment only for a conversation member. Attachments hidden by a delete-for-me action are no longer downloadable by that user.
+- `POST /attachments/{attachmentId}/delete` lets the message author delete the attachment.
+- Direct one-to-one message sends are rejected if either participant has blocked the other.
+
+## Applying migrations to an existing installation
+Run `php database/migrate.php` using PHP CLI from the project root after `config.php` exists. The runner refuses web requests and records completed migration filenames in `schema_migrations`. Take a database backup before applying updates. A fresh installation continues to use `database/schema.sql` through the setup page.
