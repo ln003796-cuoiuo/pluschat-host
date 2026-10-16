@@ -48,3 +48,6 @@ Run `php database/migrate.php` using PHP CLI from the project root after `config
 ## Message reactions
 - `GET /messages/{messageId}/reactions` returns reaction counts and whether the current user selected each reaction.
 - `POST /messages/{messageId}/reactions` adds a reaction; `POST /messages/{messageId}/reactions/remove` removes it. Both write routes are rate-limited and require conversation membership.
+
+## Maintenance
+- `php database/cleanup.php` removes expired stories, password-reset tokens, email-verification tokens, expired access tokens, and old rate-limit buckets. It refuses web requests. Run it daily using the hosting scheduler if available; story visibility already filters expired stories even before cleanup.
