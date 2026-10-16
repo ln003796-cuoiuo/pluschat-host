@@ -21,6 +21,9 @@ final class PCLoginService
         if (!$user || !password_verify($input['password'], (string)$user['password_hash'])) {
             return ['status' => 401, 'body' => ['ok' => false, 'error' => 'invalid_credentials']];
         }
+        if (!empty($user['phone']) && empty($user['phone_verified_at'])) {
+            return ['status' => 403, 'body' => ['ok' => false, 'error' => 'phone_not_verified', 'message' => 'Сначала подтверди номер телефона. Запроси новый SMS-код на экране регистрации.']];
+        }
         if (empty($user['email_verified_at'])) {
             return ['status' => 403, 'body' => ['ok' => false, 'error' => 'email_not_verified', 'message' => 'Сначала подтвердите электронную почту.']];
         }
