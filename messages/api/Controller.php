@@ -43,6 +43,7 @@ function pc_messages_dispatch(string $path, string $method): bool
                 }
         
                 if ($method === 'POST') {
+                    pc_rate_limit('message-send', 120, 60);
                     $data = pc_input();
                     $envelope = pc_encrypted_envelope($data['body'] ?? null);
                     if (!$envelope) pc_json(422, ['ok' => false, 'error' => 'encrypted_message_envelope_required', 'format' => 'pc-e2ee-v1']);
