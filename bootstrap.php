@@ -21,7 +21,7 @@ function pc_db(): PDO {
     }
     $host = (string) pc_config('db_host', 'localhost');
     $name = (string) pc_config('db_name', 'pluschat');
-    $user = (string) pc_config('db_user', 'Admin');
+    $user = (string) pc_config('db_user', 'admin');
     $password = (string) pc_config('db_password', '');
     if ($password === '') {
         throw new RuntimeException('Database password is not configured on the server.');
@@ -76,4 +76,25 @@ function pc_token_user(): array {
         pc_json(401, ['ok' => false, 'error' => 'invalid_or_expired_token']);
     }
     return $user;
+}
+
+
+function pc_rate_limit(string $bucket, int $limit, int $windowSeconds): void {
+    $ip = (string)($_SERVER['REMOTE_ADDR'] ?? 'unknown');
+    $key = hash('sha256', $bucket . '|' . $ip);
+    $windowSeconds = max(1, min(86400, $windowSeconds));
+    $limit = max(1, min(1000, $limit));
+    $pdo = pc_db();
+    $sql = 'INSERT INTO api_rate_limits (bucket_key, window_started_at, hit_count) VALUES (?, UTC_TIMESTAMP(), 1)
+        ON DUPLICATE KEY UPDATE
+        hit_count = IF(TIMESTAMPDIFF(SECOND, window_started_at, UTC_TIMESTAMP()) >= ' . $windowSeconds . ', 1, hit_count + 1),
+        window_started_at = IF(TIMESTAMPDIFF(SECOND, window_started_at, UTC_TIMESTAMP()) >= ' . $windowSeconds . ', UTC_TIMESTAMP(), window_started_at)';
+    $pdo->prepare($sql)->execute([$key]);
+    $stmt = $pdo->prepare('SELECT hit_count, GREATEST(1, ' . $windowSeconds . ' - TIMESTAMPDIFF(SECOND, window_started_at, UTC_TIMESTAMP())) AS retry_after FROM api_rate_limits WHERE bucket_key = ?');
+    $stmt->execute([$key]);
+    $state = $stmt->fetch();
+    if ($state && (int)$state['hit_count'] > $limit) {
+        header('Retry-After: ' . (int)$state['retry_after']);
+        pc_json(429, ['ok' => false, 'error' => 'rate_limit_exceeded', 'retry_after' => (int)$state['retry_after']]);
+    }
 }

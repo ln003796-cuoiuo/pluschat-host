@@ -89,6 +89,7 @@ try {
     }
 
     if ($path === '/api/v1/auth/register' && $method === 'POST') {
+        pc_rate_limit('register', 5, 3600);
         $data = pc_input();
         $email = strtolower(pc_string($data, 'email'));
         $username = pc_string($data, 'username');
@@ -170,6 +171,7 @@ try {
     }
 
     if ($path === '/api/v1/auth/resend-verification' && $method === 'POST') {
+        pc_rate_limit('resend-verification', 3, 3600);
         $email = strtolower(pc_string(pc_input(), 'email'));
         if (!filter_var($email, FILTER_VALIDATE_EMAIL)) pc_json(422, ['ok' => false, 'error' => 'invalid_email']);
         $pdo = pc_db();
@@ -187,10 +189,16 @@ try {
     }
 
     if ($path === '/api/v1/auth/login' && $method === 'POST') {
+        pc_rate_limit('login-ip', 30, 900);
         $data = pc_input();
         $login = strtolower(pc_string($data, 'login'));
         if ($login === '') $login = strtolower(pc_string($data, 'email'));
+        pc_rate_limit('login-account-' . hash('sha256', $login), 8, 900);
         $password = is_string($data['password'] ?? null) ? $data['password'] : '';
+        $deviceKey = pc_string($data, 'device_key');
+        $deviceName = pc_string($data, 'device_name') ?: 'Unknown device';
+        $platform = pc_string($data, 'platform') ?: 'unknown';
+        if ($deviceKey !== '' && (!preg_match('/^[a-f0-9]{32,128}$/i', $deviceKey) || pc_len($deviceName) > 120 || pc_len($platform) > 40)) pc_json(422, ['ok' => false, 'error' => 'invalid_device_details']);
         $stmt = pc_db()->prepare('SELECT id, email, username, password_hash, first_name, last_name, birth_date, email_verified_at, created_at FROM users WHERE email = ? OR username = ? LIMIT 1');
         $stmt->execute([$login, $login]);
         $user = $stmt->fetch();
@@ -203,8 +211,14 @@ try {
         $token = bin2hex(random_bytes(32));
         $expiresAt = (new DateTimeImmutable('now', new DateTimeZone('UTC')))->modify('+30 days')->format('Y-m-d H:i:s');
         $pdo = pc_db();
-        $pdo->prepare('INSERT INTO auth_tokens (user_id, token_hash, expires_at) VALUES (?, ?, ?)')
-            ->execute([$user['id'], hash('sha256', $token), $expiresAt]);
+        $deviceHash = null;
+        if ($deviceKey !== '') {
+            $deviceHash = hash('sha256', $deviceKey);
+            $pdo->prepare('INSERT INTO user_devices (user_id, device_key_hash, device_name, platform, last_seen_at, revoked_at) VALUES (?, ?, ?, ?, UTC_TIMESTAMP(), NULL) ON DUPLICATE KEY UPDATE device_name = VALUES(device_name), platform = VALUES(platform), last_seen_at = UTC_TIMESTAMP(), revoked_at = NULL')
+                ->execute([$user['id'], $deviceHash, $deviceName, $platform]);
+        }
+        $pdo->prepare('INSERT INTO auth_tokens (user_id, token_hash, device_key_hash, expires_at) VALUES (?, ?, ?, ?)')
+            ->execute([$user['id'], hash('sha256', $token), $deviceHash, $expiresAt]);
         pc_json(200, ['ok' => true, 'token' => $token, 'token_type' => 'Bearer', 'expires_at' => $expiresAt, 'user' => pc_public_user($user)]);
     }
 
@@ -269,8 +283,18 @@ try {
             pc_json(422, ['ok' => false, 'error' => 'query_must_be_2_to_64_characters']);
         }
         $like = '%' . addcslashes($query, '%_\\') . '%';
-        $stmt = pc_db()->prepare('SELECT id, username, first_name, last_name FROM users WHERE id <> ? AND (username LIKE ? OR first_name LIKE ? OR last_name LIKE ?) ORDER BY username LIMIT 30');
-        $stmt->execute([$user['id'], $like, $like, $like]);
+        $stmt = pc_db()->prepare("SELECT u.id, u.username, u.first_name, u.last_name
+            FROM users u LEFT JOIN user_settings s ON s.user_id = u.id
+            WHERE u.id <> ? AND (u.username LIKE ? OR u.first_name LIKE ? OR u.last_name LIKE ?)
+              AND COALESCE(s.profile_visibility, 'everyone') <> 'nobody'
+              AND (COALESCE(s.profile_visibility, 'everyone') <> 'contacts' OR EXISTS (
+                  SELECT 1 FROM conversation_members mine
+                  JOIN conversation_members theirs ON theirs.conversation_id = mine.conversation_id
+                  WHERE mine.user_id = ? AND theirs.user_id = u.id
+              ))
+              AND NOT EXISTS (SELECT 1 FROM user_blocks b WHERE (b.user_id = ? AND b.blocked_user_id = u.id) OR (b.user_id = u.id AND b.blocked_user_id = ?))
+            ORDER BY u.username LIMIT 30");
+        $stmt->execute([$user['id'], $like, $like, $like, $user['id'], $user['id'], $user['id']]);
         pc_json(200, ['ok' => true, 'users' => array_map(static fn(array $u): array => [
             'id' => (string)$u['id'], 'username' => $u['username'],
             'first_name' => $u['first_name'], 'last_name' => $u['last_name'],
@@ -286,6 +310,9 @@ try {
         $exists = $pdo->prepare('SELECT id FROM users WHERE id = ? AND email_verified_at IS NOT NULL');
         $exists->execute([$otherId]);
         if (!$exists->fetch()) pc_json(404, ['ok' => false, 'error' => 'user_not_found']);
+        $blocked = $pdo->prepare('SELECT 1 FROM user_blocks WHERE (user_id = ? AND blocked_user_id = ?) OR (user_id = ? AND blocked_user_id = ?) LIMIT 1');
+        $blocked->execute([$user['id'], $otherId, $otherId, $user['id']]);
+        if ($blocked->fetchColumn()) pc_json(403, ['ok' => false, 'error' => 'messaging_blocked']);
 
         $find = $pdo->prepare(
             'SELECT c.id FROM conversations c
@@ -336,6 +363,18 @@ try {
         ], $stmt->fetchAll())]);
     }
 
+
+    if (preg_match('#^/api/v1/conversations/([0-9]+)/read$#', $path, $matches) && $method === 'POST') {
+        $user = pc_require_verified_user();
+        $conversationId = (int)$matches[1];
+        $member = pc_db()->prepare('SELECT 1 FROM conversation_members WHERE conversation_id = ? AND user_id = ?');
+        $member->execute([$conversationId, $user['id']]);
+        if (!$member->fetchColumn()) pc_json(404, ['ok' => false, 'error' => 'conversation_not_found']);
+        $stmt = pc_db()->prepare('INSERT INTO message_receipts (message_id, user_id, delivered_at, read_at) SELECT id, ?, UTC_TIMESTAMP(), UTC_TIMESTAMP() FROM messages WHERE conversation_id = ? AND sender_id <> ? ON DUPLICATE KEY UPDATE delivered_at = COALESCE(delivered_at, VALUES(delivered_at)), read_at = VALUES(read_at)');
+        $stmt->execute([$user['id'], $conversationId, $user['id']]);
+        pc_json(200, ['ok' => true, 'marked_read' => $stmt->rowCount()]);
+    }
+
     if (preg_match('#^/api/v1/conversations/(\d+)/messages$#', $path, $matches)) {
         $user = pc_require_verified_user();
         $conversationId = (int)$matches[1];
@@ -372,6 +411,576 @@ try {
         }
         header('Allow: GET, POST');
         pc_json(405, ['ok' => false, 'error' => 'method_not_allowed']);
+    }
+
+
+
+    if ($path === '/api/v1/devices' && $method === 'GET') {
+        $user = pc_require_verified_user();
+        $stmt = pc_db()->prepare('SELECT id, device_name, platform, last_seen_at, created_at FROM user_devices WHERE user_id = ? AND revoked_at IS NULL ORDER BY last_seen_at DESC');
+        $stmt->execute([$user['id']]);
+        pc_json(200, ['ok' => true, 'devices' => $stmt->fetchAll()]);
+    }
+
+    if (preg_match('#^/api/v1/devices/([0-9]+)/revoke$#', $path, $matches) && $method === 'POST') {
+        $user = pc_require_verified_user();
+        $deviceId = (int)$matches[1];
+        $stmt = pc_db()->prepare('SELECT device_key_hash FROM user_devices WHERE id = ? AND user_id = ? AND revoked_at IS NULL LIMIT 1');
+        $stmt->execute([$deviceId, $user['id']]);
+        $device = $stmt->fetch();
+        if (!$device) pc_json(404, ['ok' => false, 'error' => 'device_not_found']);
+        $pdo = pc_db();
+        $pdo->beginTransaction();
+        try {
+            $pdo->prepare('UPDATE user_devices SET revoked_at = UTC_TIMESTAMP() WHERE id = ? AND user_id = ?')->execute([$deviceId, $user['id']]);
+            $pdo->prepare('DELETE FROM auth_tokens WHERE user_id = ? AND device_key_hash = ?')->execute([$user['id'], $device['device_key_hash']]);
+            $pdo->commit();
+        } catch (Throwable $e) {
+            if ($pdo->inTransaction()) $pdo->rollBack();
+            throw $e;
+        }
+        pc_json(200, ['ok' => true, 'revoked' => true]);
+    }
+
+    if ($path === '/api/v1/auth/sessions/revoke-others' && $method === 'POST') {
+        $user = pc_require_verified_user();
+        $header = $_SERVER['HTTP_AUTHORIZATION'] ?? '';
+        preg_match('/^Bearer\\s+([a-f0-9]{64})$/i', $header, $matches);
+        $currentHash = hash('sha256', $matches[1]);
+        $stmt = pc_db()->prepare('DELETE FROM auth_tokens WHERE user_id = ? AND token_hash <> ?');
+        $stmt->execute([$user['id'], $currentHash]);
+        pc_json(200, ['ok' => true, 'revoked_sessions' => $stmt->rowCount()]);
+    }
+
+
+    if ($path === '/api/v1/birthdays' && $method === 'GET') {
+        $user = pc_require_verified_user();
+        $sql = "SELECT u.id, u.username, u.first_name, u.last_name,
+            CASE WHEN DATE_FORMAT(u.birth_date, '%m-%d') >= DATE_FORMAT(UTC_DATE(), '%m-%d')
+                 THEN STR_TO_DATE(CONCAT(YEAR(UTC_DATE()), '-', DATE_FORMAT(u.birth_date, '%m-%d')), '%Y-%m-%d')
+                 ELSE STR_TO_DATE(CONCAT(YEAR(UTC_DATE()) + 1, '-', DATE_FORMAT(u.birth_date, '%m-%d')), '%Y-%m-%d')
+            END AS next_birthday,
+            DATEDIFF(
+                CASE WHEN DATE_FORMAT(u.birth_date, '%m-%d') >= DATE_FORMAT(UTC_DATE(), '%m-%d')
+                     THEN STR_TO_DATE(CONCAT(YEAR(UTC_DATE()), '-', DATE_FORMAT(u.birth_date, '%m-%d')), '%Y-%m-%d')
+                     ELSE STR_TO_DATE(CONCAT(YEAR(UTC_DATE()) + 1, '-', DATE_FORMAT(u.birth_date, '%m-%d')), '%Y-%m-%d')
+                END, UTC_DATE()
+            ) AS days_until
+            FROM users u JOIN user_settings s ON s.user_id = u.id
+            WHERE u.id <> ? AND u.email_verified_at IS NOT NULL AND u.birth_date IS NOT NULL
+              AND s.show_birth_date = 1 AND s.profile_visibility <> 'nobody'
+              AND (s.profile_visibility = 'everyone' OR EXISTS (
+                  SELECT 1 FROM conversation_members mine
+                  JOIN conversation_members theirs ON theirs.conversation_id = mine.conversation_id
+                  WHERE mine.user_id = ? AND theirs.user_id = u.id
+              ))
+              AND NOT EXISTS (SELECT 1 FROM user_blocks b WHERE (b.user_id = ? AND b.blocked_user_id = u.id) OR (b.user_id = u.id AND b.blocked_user_id = ?))
+            HAVING days_until BETWEEN 0 AND 30
+            ORDER BY days_until, u.username LIMIT 100";
+        $stmt = pc_db()->prepare($sql);
+        $stmt->execute([$user['id'], $user['id'], $user['id'], $user['id']]);
+        pc_json(200, ['ok' => true, 'birthdays' => $stmt->fetchAll()]);
+    }
+
+    if ($path === '/api/v1/settings' && ($method === 'GET' || $method === 'POST')) {
+        $user = pc_require_verified_user();
+        $pdo = pc_db();
+        $pdo->prepare('INSERT IGNORE INTO user_settings (user_id) VALUES (?)')->execute([$user['id']]);
+
+        if ($method === 'POST') {
+            $data = pc_input();
+            $allowed = [
+                'profile_visibility' => ['everyone', 'contacts', 'nobody'],
+                'theme' => ['system', 'light', 'dark'],
+            ];
+            $updates = [];
+            $values = [];
+            foreach ($allowed as $field => $options) {
+                if (array_key_exists($field, $data)) {
+                    if (!is_string($data[$field]) || !in_array($data[$field], $options, true)) {
+                        pc_json(422, ['ok' => false, 'error' => 'invalid_' . $field]);
+                    }
+                    $updates[] = $field . ' = ?';
+                    $values[] = $data[$field];
+                }
+            }
+            foreach (['show_birth_date', 'show_local_group', 'location_sharing', 'notifications_enabled'] as $field) {
+                if (array_key_exists($field, $data)) {
+                    if (!is_bool($data[$field]) && !in_array($data[$field], [0, 1, '0', '1'], true)) {
+                        pc_json(422, ['ok' => false, 'error' => 'invalid_' . $field]);
+                    }
+                    $updates[] = $field . ' = ?';
+                    $values[] = (int)(bool)$data[$field];
+                }
+            }
+            if (array_key_exists('currency', $data)) {
+                $currency = strtoupper(pc_string($data, 'currency'));
+                if (!preg_match('/^[A-Z]{3}$/', $currency)) pc_json(422, ['ok' => false, 'error' => 'invalid_currency']);
+                $updates[] = 'currency = ?';
+                $values[] = $currency;
+            }
+            if (array_key_exists('language', $data)) {
+                $language = pc_string($data, 'language');
+                if (!preg_match('/^[a-z]{2}(?:-[A-Z]{2})?$/', $language)) pc_json(422, ['ok' => false, 'error' => 'invalid_language']);
+                $updates[] = 'language = ?';
+                $values[] = $language;
+            }
+            if (array_key_exists('area_code', $data)) {
+                $areaCode = pc_string($data, 'area_code');
+                if (pc_len($areaCode) > 100) pc_json(422, ['ok' => false, 'error' => 'invalid_area_code']);
+                $updates[] = 'area_code = ?';
+                $values[] = $areaCode === '' ? null : $areaCode;
+            }
+            if (!$updates) pc_json(422, ['ok' => false, 'error' => 'no_settings_to_update']);
+            $values[] = $user['id'];
+            $pdo->prepare('UPDATE user_settings SET ' . implode(', ', $updates) . ' WHERE user_id = ?')->execute($values);
+
+            $stmt = $pdo->prepare('SELECT show_local_group, location_sharing, area_code FROM user_settings WHERE user_id = ?');
+            $stmt->execute([$user['id']]);
+            $prefs = $stmt->fetch();
+            if ($prefs && (int)$prefs['show_local_group'] === 1 && (int)$prefs['location_sharing'] === 1 && !empty($prefs['area_code'])) {
+                $area = (string)$prefs['area_code'];
+                $find = $pdo->prepare("SELECT id FROM chat_groups WHERE group_kind = 'local_area' AND area_code = ? LIMIT 1");
+                $find->execute([$area]);
+                $local = $find->fetch();
+                if (!$local) {
+                    try {
+                        $invite = bin2hex(random_bytes(16));
+                        $pdo->prepare("INSERT INTO chat_groups (owner_id, title, description, group_kind, area_code, is_private, invite_code) VALUES (?, ?, ?, 'local_area', ?, 0, ?)")
+                            ->execute([$user['id'], 'Местная группа', 'Группа пользователей этого района', $area, $invite]);
+                        $localId = (int)$pdo->lastInsertId();
+                    } catch (PDOException $e) {
+                        $find->execute([$area]);
+                        $local = $find->fetch();
+                        if (!$local) throw $e;
+                        $localId = (int)$local['id'];
+                    }
+                } else {
+                    $localId = (int)$local['id'];
+                }
+                $pdo->prepare('INSERT IGNORE INTO group_members (group_id, user_id, role) VALUES (?, ?, ?)')
+                    ->execute([$localId, $user['id'], 'member']);
+            }
+        }
+
+        $stmt = $pdo->prepare('SELECT profile_visibility, show_birth_date, show_local_group, location_sharing, area_code, language, currency, theme, notifications_enabled FROM user_settings WHERE user_id = ?');
+        $stmt->execute([$user['id']]);
+        pc_json(200, ['ok' => true, 'settings' => $stmt->fetch()]);
+    }
+
+
+    if (preg_match('#^/api/v1/groups/([0-9]+)/messages$#', $path, $matches) && ($method === 'GET' || $method === 'POST')) {
+        $user = pc_require_verified_user();
+        $groupId = (int)$matches[1];
+        $member = pc_db()->prepare('SELECT role FROM group_members WHERE group_id = ? AND user_id = ?');
+        $member->execute([$groupId, $user['id']]);
+        if (!$member->fetch()) pc_json(404, ['ok' => false, 'error' => 'group_not_found']);
+        if ($method === 'GET') {
+            $limit = filter_var($_GET['limit'] ?? 50, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1, 'max_range' => 100]]) ?: 50;
+            $before = filter_var($_GET['before'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
+            $sql = 'SELECT id, sender_id, body, body_encrypted, encryption_version, created_at, edited_at FROM group_messages WHERE group_id = ?';
+            $params = [$groupId];
+            if ($before) { $sql .= ' AND id < ?'; $params[] = $before; }
+            $sql .= ' ORDER BY id DESC LIMIT ' . (int)$limit;
+            $stmt = pc_db()->prepare($sql);
+            $stmt->execute($params);
+            pc_json(200, ['ok' => true, 'messages' => array_reverse($stmt->fetchAll())]);
+        }
+        $data = pc_input();
+        $body = pc_string($data, 'body');
+        $encrypted = filter_var($data['encrypted'] ?? false, FILTER_VALIDATE_BOOLEAN) ? 1 : 0;
+        $version = $encrypted ? (pc_string($data, 'encryption_version') ?: 'client-v1') : null;
+        if ($body === '' || pc_len($body) > 4000 || ($encrypted && strlen($body) > 12000)) pc_json(422, ['ok' => false, 'error' => 'invalid_message_body']);
+        pc_db()->prepare('INSERT INTO group_messages (group_id, sender_id, body, body_encrypted, encryption_version) VALUES (?, ?, ?, ?, ?)')->execute([$groupId, $user['id'], $body, $encrypted, $version]);
+        pc_json(201, ['ok' => true, 'message' => ['id' => (string)pc_db()->lastInsertId(), 'group_id' => (string)$groupId, 'sender_id' => (string)$user['id'], 'body' => $body, 'encrypted' => (bool)$encrypted, 'encryption_version' => $version, 'created_at' => gmdate('Y-m-d H:i:s')]]);
+    }
+
+    if (preg_match('#^/api/v1/groups/([0-9]+)/leave$#', $path, $matches) && $method === 'POST') {
+        $user = pc_require_verified_user();
+        $groupId = (int)$matches[1];
+        $stmt = pc_db()->prepare('SELECT role FROM group_members WHERE group_id = ? AND user_id = ?');
+        $stmt->execute([$groupId, $user['id']]);
+        $role = $stmt->fetchColumn();
+        if ($role === false) pc_json(404, ['ok' => false, 'error' => 'group_not_found']);
+        if ($role === 'owner') pc_json(409, ['ok' => false, 'error' => 'owner_must_transfer_or_delete_group']);
+        pc_db()->prepare('DELETE FROM group_members WHERE group_id = ? AND user_id = ?')->execute([$groupId, $user['id']]);
+        pc_json(200, ['ok' => true, 'left' => true]);
+    }
+
+    if ($path === '/api/v1/groups/discover' && $method === 'GET') {
+        $user = pc_require_verified_user();
+        $query = trim((string)($_GET['q'] ?? ''));
+        $like = '%' . addcslashes($query, '%_\\\\') . '%';
+        $stmt = pc_db()->prepare("SELECT g.id, g.title, g.description, g.topics_enabled, (SELECT COUNT(*) FROM group_members gm WHERE gm.group_id = g.id) AS member_count FROM chat_groups g WHERE g.is_private = 0 AND g.group_kind = 'group' AND (g.title LIKE ? OR g.description LIKE ?) AND NOT EXISTS (SELECT 1 FROM user_blocks b WHERE (b.user_id = ? AND b.blocked_user_id = g.owner_id) OR (b.user_id = g.owner_id AND b.blocked_user_id = ?)) ORDER BY g.id DESC LIMIT 50");
+        $stmt->execute([$like, $like, $user['id'], $user['id']]);
+        pc_json(200, ['ok' => true, 'groups' => $stmt->fetchAll()]);
+    }
+
+    if ($path === '/api/v1/groups' && ($method === 'GET' || $method === 'POST')) {
+        $user = pc_require_verified_user();
+        $pdo = pc_db();
+        if ($method === 'POST') {
+            $data = pc_input();
+            $title = pc_string($data, 'title');
+            $description = pc_string($data, 'description');
+            $isPrivate = filter_var($data['is_private'] ?? true, FILTER_VALIDATE_BOOLEAN) ? 1 : 0;
+            $topicsEnabled = filter_var($data['topics_enabled'] ?? false, FILTER_VALIDATE_BOOLEAN) ? 1 : 0;
+            if ($title === '' || pc_len($title) > 120 || pc_len($description) > 1000) pc_json(422, ['ok' => false, 'error' => 'invalid_group_fields']);
+            $invite = bin2hex(random_bytes(16));
+            $pdo->beginTransaction();
+            try {
+                $stmt = $pdo->prepare("INSERT INTO chat_groups (owner_id, title, description, group_kind, is_private, invite_code, topics_enabled) VALUES (?, ?, ?, 'group', ?, ?, ?)");
+                $stmt->execute([$user['id'], $title, $description, $isPrivate, $invite, $topicsEnabled]);
+                $groupId = (int)$pdo->lastInsertId();
+                $pdo->prepare("INSERT INTO group_members (group_id, user_id, role) VALUES (?, ?, 'owner')")->execute([$groupId, $user['id']]);
+                $pdo->commit();
+            } catch (Throwable $e) {
+                if ($pdo->inTransaction()) $pdo->rollBack();
+                throw $e;
+            }
+            pc_json(201, ['ok' => true, 'group' => ['id' => (string)$groupId, 'title' => $title, 'description' => $description, 'invite_code' => $invite, 'is_private' => (bool)$isPrivate, 'topics_enabled' => (bool)$topicsEnabled]]);
+        }
+        $stmt = $pdo->prepare('SELECT g.id, g.title, g.description, g.group_kind, g.is_private, g.topics_enabled, g.created_at, gm.role, (SELECT COUNT(*) FROM group_members allm WHERE allm.group_id = g.id) AS member_count FROM group_members gm JOIN chat_groups g ON g.id = gm.group_id LEFT JOIN user_settings s ON s.user_id = gm.user_id WHERE gm.user_id = ? AND (g.group_kind <> ? OR COALESCE(s.show_local_group, 0) = 1) ORDER BY g.updated_at DESC LIMIT 100');
+        $stmt->execute([$user['id'], 'local_area']);
+        pc_json(200, ['ok' => true, 'groups' => $stmt->fetchAll()]);
+    }
+
+    if (preg_match('#^/api/v1/groups/([0-9]+)/join$#', $path, $matches) && $method === 'POST') {
+        $user = pc_require_verified_user();
+        $groupId = (int)$matches[1];
+        $data = pc_input();
+        $invite = pc_string($data, 'invite_code');
+        $stmt = pc_db()->prepare('SELECT id, is_private FROM chat_groups WHERE id = ? LIMIT 1');
+        $stmt->execute([$groupId]);
+        $group = $stmt->fetch();
+        if (!$group) pc_json(404, ['ok' => false, 'error' => 'group_not_found']);
+        if ((int)$group['is_private'] === 1) {
+            $check = pc_db()->prepare('SELECT 1 FROM chat_groups WHERE id = ? AND invite_code = ?');
+            $check->execute([$groupId, $invite]);
+            if (!$check->fetchColumn()) pc_json(403, ['ok' => false, 'error' => 'valid_invite_required']);
+        }
+        pc_db()->prepare("INSERT IGNORE INTO group_members (group_id, user_id, role) VALUES (?, ?, 'member')")->execute([$groupId, $user['id']]);
+        pc_json(200, ['ok' => true, 'joined' => true, 'group_id' => (string)$groupId]);
+    }
+
+    if (preg_match('#^/api/v1/groups/([0-9]+)/topics$#', $path, $matches) && ($method === 'GET' || $method === 'POST')) {
+        $user = pc_require_verified_user();
+        $groupId = (int)$matches[1];
+        $member = pc_db()->prepare('SELECT g.topics_enabled, gm.role FROM chat_groups g JOIN group_members gm ON gm.group_id = g.id WHERE g.id = ? AND gm.user_id = ?');
+        $member->execute([$groupId, $user['id']]);
+        $group = $member->fetch();
+        if (!$group) pc_json(404, ['ok' => false, 'error' => 'group_not_found']);
+        if (!(int)$group['topics_enabled']) pc_json(409, ['ok' => false, 'error' => 'topics_disabled']);
+        if ($method === 'POST') {
+            if (!in_array($group['role'], ['owner', 'admin', 'moderator'], true)) pc_json(403, ['ok' => false, 'error' => 'insufficient_role']);
+            $data = pc_input();
+            $title = pc_string($data, 'title');
+            $description = pc_string($data, 'description');
+            if ($title === '' || pc_len($title) > 120 || pc_len($description) > 500) pc_json(422, ['ok' => false, 'error' => 'invalid_topic_fields']);
+            pc_db()->prepare('INSERT INTO topics (group_id, creator_id, title, description) VALUES (?, ?, ?, ?)')->execute([$groupId, $user['id'], $title, $description]);
+            pc_json(201, ['ok' => true, 'topic' => ['id' => (string)pc_db()->lastInsertId(), 'title' => $title, 'description' => $description]]);
+        }
+        $stmt = pc_db()->prepare('SELECT id, title, description, creator_id, created_at FROM topics WHERE group_id = ? ORDER BY id DESC LIMIT 200');
+        $stmt->execute([$groupId]);
+        pc_json(200, ['ok' => true, 'topics' => $stmt->fetchAll()]);
+    }
+
+    if ($path === '/api/v1/channels' && ($method === 'GET' || $method === 'POST')) {
+        $user = pc_require_verified_user();
+        $pdo = pc_db();
+        if ($method === 'POST') {
+            $data = pc_input();
+            $title = pc_string($data, 'title');
+            $description = pc_string($data, 'description');
+            $isPublic = filter_var($data['is_public'] ?? false, FILTER_VALIDATE_BOOLEAN) ? 1 : 0;
+            $topicsEnabled = filter_var($data['topics_enabled'] ?? false, FILTER_VALIDATE_BOOLEAN) ? 1 : 0;
+            if ($title === '' || pc_len($title) > 120 || pc_len($description) > 1000) pc_json(422, ['ok' => false, 'error' => 'invalid_channel_fields']);
+            $invite = bin2hex(random_bytes(16));
+            $pdo->beginTransaction();
+            try {
+                $pdo->prepare('INSERT INTO channels (owner_id, title, description, is_public, invite_code, topics_enabled) VALUES (?, ?, ?, ?, ?, ?)')->execute([$user['id'], $title, $description, $isPublic, $invite, $topicsEnabled]);
+                $channelId = (int)$pdo->lastInsertId();
+                $pdo->prepare("INSERT INTO channel_members (channel_id, user_id, role) VALUES (?, ?, 'owner')")->execute([$channelId, $user['id']]);
+                $pdo->commit();
+            } catch (Throwable $e) {
+                if ($pdo->inTransaction()) $pdo->rollBack();
+                throw $e;
+            }
+            pc_json(201, ['ok' => true, 'channel' => ['id' => (string)$channelId, 'title' => $title, 'description' => $description, 'invite_code' => $invite, 'is_public' => (bool)$isPublic, 'topics_enabled' => (bool)$topicsEnabled]]);
+        }
+        $stmt = $pdo->prepare('SELECT c.id, c.title, c.description, c.is_public, c.topics_enabled, c.created_at, cm.role FROM channel_members cm JOIN channels c ON c.id = cm.channel_id WHERE cm.user_id = ? ORDER BY c.updated_at DESC LIMIT 100');
+        $stmt->execute([$user['id']]);
+        pc_json(200, ['ok' => true, 'channels' => $stmt->fetchAll()]);
+    }
+
+
+    if (preg_match('#^/api/v1/channels/([0-9]+)/posts$#', $path, $matches) && ($method === 'GET' || $method === 'POST')) {
+        $user = pc_require_verified_user();
+        $channelId = (int)$matches[1];
+        $member = pc_db()->prepare('SELECT role FROM channel_members WHERE channel_id = ? AND user_id = ?');
+        $member->execute([$channelId, $user['id']]);
+        $role = $member->fetchColumn();
+        if ($role === false) pc_json(404, ['ok' => false, 'error' => 'channel_not_found']);
+        if ($method === 'GET') {
+            $limit = filter_var($_GET['limit'] ?? 50, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1, 'max_range' => 100]]) ?: 50;
+            $before = filter_var($_GET['before'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
+            $sql = 'SELECT id, sender_id, body, body_encrypted, encryption_version, created_at, edited_at FROM channel_posts WHERE channel_id = ?';
+            $params = [$channelId];
+            if ($before) { $sql .= ' AND id < ?'; $params[] = $before; }
+            $sql .= ' ORDER BY id DESC LIMIT ' . (int)$limit;
+            $stmt = pc_db()->prepare($sql);
+            $stmt->execute($params);
+            pc_json(200, ['ok' => true, 'posts' => array_reverse($stmt->fetchAll())]);
+        }
+        if (!in_array($role, ['owner', 'admin'], true)) pc_json(403, ['ok' => false, 'error' => 'channel_posting_restricted']);
+        $data = pc_input();
+        $body = pc_string($data, 'body');
+        $encrypted = filter_var($data['encrypted'] ?? false, FILTER_VALIDATE_BOOLEAN) ? 1 : 0;
+        $version = $encrypted ? (pc_string($data, 'encryption_version') ?: 'client-v1') : null;
+        if ($body === '' || pc_len($body) > 4000 || ($encrypted && strlen($body) > 12000)) pc_json(422, ['ok' => false, 'error' => 'invalid_post_body']);
+        pc_db()->prepare('INSERT INTO channel_posts (channel_id, sender_id, body, body_encrypted, encryption_version) VALUES (?, ?, ?, ?, ?)')->execute([$channelId, $user['id'], $body, $encrypted, $version]);
+        pc_json(201, ['ok' => true, 'post' => ['id' => (string)pc_db()->lastInsertId(), 'channel_id' => (string)$channelId, 'sender_id' => (string)$user['id'], 'body' => $body, 'encrypted' => (bool)$encrypted, 'encryption_version' => $version, 'created_at' => gmdate('Y-m-d H:i:s')]]);
+    }
+
+    if ($path === '/api/v1/channels/discover' && $method === 'GET') {
+        $user = pc_require_verified_user();
+        $query = trim((string)($_GET['q'] ?? ''));
+        $like = '%' . addcslashes($query, '%_\\\\') . '%';
+        $stmt = pc_db()->prepare('SELECT c.id, c.title, c.description, c.topics_enabled, (SELECT COUNT(*) FROM channel_members cm WHERE cm.channel_id = c.id) AS subscriber_count FROM channels c WHERE c.is_public = 1 AND (c.title LIKE ? OR c.description LIKE ?) AND NOT EXISTS (SELECT 1 FROM user_blocks b WHERE (b.user_id = ? AND b.blocked_user_id = c.owner_id) OR (b.user_id = c.owner_id AND b.blocked_user_id = ?)) ORDER BY c.id DESC LIMIT 50');
+        $stmt->execute([$like, $like, $user['id'], $user['id']]);
+        pc_json(200, ['ok' => true, 'channels' => $stmt->fetchAll()]);
+    }
+
+    if (preg_match('#^/api/v1/channels/([0-9]+)/subscribe$#', $path, $matches) && $method === 'POST') {
+        $user = pc_require_verified_user();
+        $channelId = (int)$matches[1];
+        $data = pc_input();
+        $invite = pc_string($data, 'invite_code');
+        $stmt = pc_db()->prepare('SELECT id, is_public FROM channels WHERE id = ?');
+        $stmt->execute([$channelId]);
+        $channel = $stmt->fetch();
+        if (!$channel) pc_json(404, ['ok' => false, 'error' => 'channel_not_found']);
+        if (!(int)$channel['is_public']) {
+            $check = pc_db()->prepare('SELECT 1 FROM channels WHERE id = ? AND invite_code = ?');
+            $check->execute([$channelId, $invite]);
+            if (!$check->fetchColumn()) pc_json(403, ['ok' => false, 'error' => 'valid_invite_required']);
+        }
+        pc_db()->prepare("INSERT IGNORE INTO channel_members (channel_id, user_id, role) VALUES (?, ?, 'subscriber')")->execute([$channelId, $user['id']]);
+        pc_json(200, ['ok' => true, 'subscribed' => true, 'channel_id' => (string)$channelId]);
+    }
+
+    if (preg_match('#^/api/v1/channels/([0-9]+)/topics$#', $path, $matches) && ($method === 'GET' || $method === 'POST')) {
+        $user = pc_require_verified_user();
+        $channelId = (int)$matches[1];
+        $member = pc_db()->prepare('SELECT c.topics_enabled, cm.role FROM channels c JOIN channel_members cm ON cm.channel_id = c.id WHERE c.id = ? AND cm.user_id = ?');
+        $member->execute([$channelId, $user['id']]);
+        $channel = $member->fetch();
+        if (!$channel) pc_json(404, ['ok' => false, 'error' => 'channel_not_found']);
+        if (!(int)$channel['topics_enabled']) pc_json(409, ['ok' => false, 'error' => 'topics_disabled']);
+        if ($method === 'POST') {
+            if (!in_array($channel['role'], ['owner', 'admin'], true)) pc_json(403, ['ok' => false, 'error' => 'insufficient_role']);
+            $data = pc_input();
+            $title = pc_string($data, 'title');
+            $description = pc_string($data, 'description');
+            if ($title === '' || pc_len($title) > 120 || pc_len($description) > 500) pc_json(422, ['ok' => false, 'error' => 'invalid_topic_fields']);
+            pc_db()->prepare('INSERT INTO topics (channel_id, creator_id, title, description) VALUES (?, ?, ?, ?)')->execute([$channelId, $user['id'], $title, $description]);
+            pc_json(201, ['ok' => true, 'topic' => ['id' => (string)pc_db()->lastInsertId(), 'title' => $title, 'description' => $description]]);
+        }
+        $stmt = pc_db()->prepare('SELECT id, title, description, creator_id, created_at FROM topics WHERE channel_id = ? ORDER BY id DESC LIMIT 200');
+        $stmt->execute([$channelId]);
+        pc_json(200, ['ok' => true, 'topics' => $stmt->fetchAll()]);
+    }
+
+    if (preg_match('#^/api/v1/topics/([0-9]+)/messages$#', $path, $matches) && ($method === 'GET' || $method === 'POST')) {
+        $user = pc_require_verified_user();
+        $topicId = (int)$matches[1];
+        $access = pc_db()->prepare('SELECT t.id, t.group_id, t.channel_id FROM topics t WHERE t.id = ? AND ((t.group_id IS NOT NULL AND EXISTS (SELECT 1 FROM group_members gm WHERE gm.group_id = t.group_id AND gm.user_id = ?)) OR (t.channel_id IS NOT NULL AND EXISTS (SELECT 1 FROM channel_members cm WHERE cm.channel_id = t.channel_id AND cm.user_id = ?)))');
+        $access->execute([$topicId, $user['id'], $user['id']]);
+        if (!$access->fetch()) pc_json(404, ['ok' => false, 'error' => 'topic_not_found']);
+        if ($method === 'GET') {
+            $limit = filter_var($_GET['limit'] ?? 50, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1, 'max_range' => 100]]) ?: 50;
+            $before = filter_var($_GET['before'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
+            $sql = 'SELECT id, sender_id, body, body_encrypted, created_at, edited_at FROM topic_messages WHERE topic_id = ?';
+            $params = [$topicId];
+            if ($before) { $sql .= ' AND id < ?'; $params[] = $before; }
+            $sql .= ' ORDER BY id DESC LIMIT ' . (int)$limit;
+            $stmt = pc_db()->prepare($sql);
+            $stmt->execute($params);
+            pc_json(200, ['ok' => true, 'messages' => array_reverse($stmt->fetchAll())]);
+        }
+        $data = pc_input();
+        $body = pc_string($data, 'body');
+        $encrypted = filter_var($data['encrypted'] ?? false, FILTER_VALIDATE_BOOLEAN) ? 1 : 0;
+        if ($body === '' || pc_len($body) > 4000) pc_json(422, ['ok' => false, 'error' => 'message_must_be_1_to_4000_characters']);
+        pc_db()->prepare('INSERT INTO topic_messages (topic_id, sender_id, body, body_encrypted) VALUES (?, ?, ?, ?)')->execute([$topicId, $user['id'], $body, $encrypted]);
+        pc_json(201, ['ok' => true, 'message' => ['id' => (string)pc_db()->lastInsertId(), 'topic_id' => (string)$topicId, 'sender_id' => (string)$user['id'], 'body' => $body, 'encrypted' => (bool)$encrypted, 'created_at' => gmdate('Y-m-d H:i:s')]]);
+    }
+
+    if (preg_match('#^/api/v1/users/([0-9]+)/block$#', $path, $matches) && $method === 'POST') {
+        $user = pc_require_verified_user();
+        $targetId = (int)$matches[1];
+        if ($targetId < 1 || $targetId === (int)$user['id']) pc_json(422, ['ok' => false, 'error' => 'invalid_block_target']);
+        $target = pc_db()->prepare('SELECT id FROM users WHERE id = ?');
+        $target->execute([$targetId]);
+        if (!$target->fetch()) pc_json(404, ['ok' => false, 'error' => 'user_not_found']);
+        pc_db()->prepare('INSERT IGNORE INTO user_blocks (user_id, blocked_user_id) VALUES (?, ?)')->execute([$user['id'], $targetId]);
+        pc_json(200, ['ok' => true, 'blocked' => true]);
+    }
+
+    if (preg_match('#^/api/v1/users/([0-9]+)/unblock$#', $path, $matches) && $method === 'POST') {
+        $user = pc_require_verified_user();
+        $targetId = (int)$matches[1];
+        pc_db()->prepare('DELETE FROM user_blocks WHERE user_id = ? AND blocked_user_id = ?')->execute([$user['id'], $targetId]);
+        pc_json(200, ['ok' => true, 'blocked' => false]);
+    }
+
+    if ($path === '/api/v1/calls' && $method === 'GET') {
+        pc_require_verified_user();
+        pc_json(200, ['ok' => true, 'calls_url' => 'https://tell.плюсчат.рф', 'separate_service' => true]);
+    }
+
+    if ($path === '/api/v1/admin/reports' && $method === 'GET') {
+        $user = pc_require_verified_user();
+        $check = pc_db()->prepare('SELECT role FROM admin_users WHERE user_id = ? LIMIT 1');
+        $check->execute([$user['id']]);
+        $admin = $check->fetch();
+        if (!$admin || !in_array($admin['role'], ['moderator', 'admin', 'owner'], true)) pc_json(403, ['ok' => false, 'error' => 'admin_required']);
+        $stmt = pc_db()->query("SELECT id, reporter_id, target_user_id, message_id, reason, details, status, created_at FROM reports WHERE status IN ('open','reviewing') ORDER BY created_at ASC LIMIT 200");
+        pc_json(200, ['ok' => true, 'reports' => $stmt->fetchAll()]);
+    }
+
+
+    if (preg_match('#^/api/v1/topics/([0-9]+)/convert-to-channel$#', $path, $matches) && $method === 'POST') {
+        $user = pc_require_verified_user();
+        $topicId = (int)$matches[1];
+        $pdo = pc_db();
+        $pdo->beginTransaction();
+        try {
+            $stmt = $pdo->prepare('SELECT * FROM topics WHERE id = ? FOR UPDATE');
+            $stmt->execute([$topicId]);
+            $topic = $stmt->fetch();
+            if (!$topic) {
+                $pdo->rollBack();
+                pc_json(404, ['ok' => false, 'error' => 'topic_not_found']);
+            }
+            $members = [];
+            if ($topic['group_id'] !== null) {
+                $role = $pdo->prepare('SELECT role FROM group_members WHERE group_id = ? AND user_id = ?');
+                $role->execute([$topic['group_id'], $user['id']]);
+                $currentRole = $role->fetchColumn();
+                if (!in_array($currentRole, ['owner', 'admin'], true)) {
+                    $pdo->rollBack();
+                    pc_json(403, ['ok' => false, 'error' => 'insufficient_role']);
+                }
+                $m = $pdo->prepare('SELECT user_id FROM group_members WHERE group_id = ?');
+                $m->execute([$topic['group_id']]);
+                $members = array_map('intval', array_column($m->fetchAll(), 'user_id'));
+            } elseif ($topic['channel_id'] !== null) {
+                $role = $pdo->prepare('SELECT role FROM channel_members WHERE channel_id = ? AND user_id = ?');
+                $role->execute([$topic['channel_id'], $user['id']]);
+                if (!in_array($role->fetchColumn(), ['owner', 'admin'], true)) {
+                    $pdo->rollBack();
+                    pc_json(403, ['ok' => false, 'error' => 'insufficient_role']);
+                }
+                $m = $pdo->prepare('SELECT user_id FROM channel_members WHERE channel_id = ?');
+                $m->execute([$topic['channel_id']]);
+                $members = array_map('intval', array_column($m->fetchAll(), 'user_id'));
+            } else {
+                $pdo->rollBack();
+                pc_json(409, ['ok' => false, 'error' => 'topic_has_no_parent']);
+            }
+
+            $invite = bin2hex(random_bytes(16));
+            $pdo->prepare('INSERT INTO channels (owner_id, title, description, is_public, invite_code, topics_enabled) VALUES (?, ?, ?, 0, ?, 1)')
+                ->execute([$user['id'], $topic['title'], $topic['description'], $invite]);
+            $channelId = (int)$pdo->lastInsertId();
+            $pdo->prepare("INSERT INTO channel_members (channel_id, user_id, role) VALUES (?, ?, 'owner')")->execute([$channelId, $user['id']]);
+            $addMember = $pdo->prepare("INSERT IGNORE INTO channel_members (channel_id, user_id, role) VALUES (?, ?, 'subscriber')");
+            foreach ($members as $memberId) {
+                if ($memberId !== (int)$user['id']) $addMember->execute([$channelId, $memberId]);
+            }
+            $pdo->prepare('UPDATE topics SET group_id = NULL, channel_id = ? WHERE id = ?')->execute([$channelId, $topicId]);
+            $pdo->commit();
+            pc_json(201, ['ok' => true, 'converted' => true, 'channel' => ['id' => (string)$channelId, 'title' => $topic['title'], 'invite_code' => $invite]]);
+        } catch (Throwable $e) {
+            if ($pdo->inTransaction()) $pdo->rollBack();
+            throw $e;
+        }
+    }
+
+    if (preg_match('#^/api/v1/messages/([0-9]+)/attachments$#', $path, $matches) && $method === 'POST') {
+        $user = pc_require_verified_user();
+        $messageId = (int)$matches[1];
+        $stmt = pc_db()->prepare('SELECT m.id, m.sender_id, m.conversation_id FROM messages m JOIN conversation_members cm ON cm.conversation_id = m.conversation_id WHERE m.id = ? AND cm.user_id = ? AND m.sender_id = ? LIMIT 1');
+        $stmt->execute([$messageId, $user['id'], $user['id']]);
+        if (!$stmt->fetch()) pc_json(404, ['ok' => false, 'error' => 'message_not_found']);
+        if (($_POST['encrypted'] ?? '') !== '1' || !isset($_FILES['file']) || !is_array($_FILES['file'])) {
+            pc_json(422, ['ok' => false, 'error' => 'encrypted_file_required', 'message' => 'Upload client-encrypted file bytes with encrypted=1.']);
+        }
+        $file = $_FILES['file'];
+        if (($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK || !is_uploaded_file((string)($file['tmp_name'] ?? ''))) {
+            pc_json(422, ['ok' => false, 'error' => 'upload_failed']);
+        }
+        $size = (int)($file['size'] ?? 0);
+        if ($size < 1 || $size > 25 * 1024 * 1024) pc_json(413, ['ok' => false, 'error' => 'attachment_size_limit_25mb']);
+        $originalName = basename(str_replace("\\", '/', (string)($_POST['original_name'] ?? 'encrypted.bin')));
+        $originalName = preg_replace('/[\\x00-\\x1F\\x7F]/u', '', $originalName) ?: 'encrypted.bin';
+        if (pc_len($originalName) > 255) $originalName = substr($originalName, 0, 255);
+        $mime = pc_string($_POST, 'mime_type') ?: 'application/octet-stream';
+        if (pc_len($mime) > 127 || !preg_match('#^[a-zA-Z0-9.+-]+/[a-zA-Z0-9.+-]+$#', $mime)) $mime = 'application/octet-stream';
+        $storageDir = dirname(__DIR__) . '/storage/uploads';
+        if (!is_dir($storageDir) && !mkdir($storageDir, 0700, true) && !is_dir($storageDir)) pc_json(500, ['ok' => false, 'error' => 'storage_unavailable']);
+        $storageKey = bin2hex(random_bytes(32)) . '.bin';
+        $target = $storageDir . '/' . $storageKey;
+        if (!move_uploaded_file((string)$file['tmp_name'], $target)) pc_json(500, ['ok' => false, 'error' => 'storage_write_failed']);
+        @chmod($target, 0600);
+        $sha = hash_file('sha256', $target);
+        try {
+            $pdo = pc_db();
+            $pdo->prepare("INSERT INTO message_attachments (message_id, storage_key, original_name, mime_type, byte_size, sha256, encryption_version) VALUES (?, ?, ?, ?, ?, ?, 'client-v1')")
+                ->execute([$messageId, $storageKey, $originalName, $mime, $size, $sha]);
+            pc_json(201, ['ok' => true, 'attachment' => ['id' => (string)$pdo->lastInsertId(), 'message_id' => (string)$messageId, 'original_name' => $originalName, 'mime_type' => $mime, 'byte_size' => $size, 'sha256' => $sha, 'encrypted' => true, 'download_url' => '/api/v1/attachments/' . (string)$pdo->lastInsertId()]]);
+        } catch (Throwable $e) {
+            @unlink($target);
+            throw $e;
+        }
+    }
+
+    if (preg_match('#^/api/v1/attachments/([0-9]+)$#', $path, $matches) && $method === 'GET') {
+        $user = pc_require_verified_user();
+        $attachmentId = (int)$matches[1];
+        $stmt = pc_db()->prepare('SELECT a.storage_key, a.original_name, a.byte_size FROM message_attachments a JOIN messages m ON m.id = a.message_id JOIN conversation_members cm ON cm.conversation_id = m.conversation_id WHERE a.id = ? AND cm.user_id = ? LIMIT 1');
+        $stmt->execute([$attachmentId, $user['id']]);
+        $attachment = $stmt->fetch();
+        if (!$attachment) pc_json(404, ['ok' => false, 'error' => 'attachment_not_found']);
+        $pathOnDisk = dirname(__DIR__) . '/storage/uploads/' . basename((string)$attachment['storage_key']);
+        if (!is_file($pathOnDisk)) pc_json(404, ['ok' => false, 'error' => 'attachment_file_missing']);
+        header('Content-Type: application/octet-stream');
+        header('Content-Length: ' . (string)filesize($pathOnDisk));
+        header('Content-Disposition: attachment; filename="encrypted.bin"');
+        header('X-Content-Type-Options: nosniff');
+        readfile($pathOnDisk);
+        exit;
+    }
+
+    if ($path === '/api/v1/reports' && $method === 'POST') {
+        $user = pc_require_verified_user();
+        $data = pc_input();
+        $targetUserId = filter_var($data['target_user_id'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
+        $messageId = filter_var($data['message_id'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
+        $reason = pc_string($data, 'reason');
+        $details = pc_string($data, 'details');
+        if (!in_array($reason, ['spam', 'harassment', 'scam', 'violence', 'other'], true) || pc_len($details) > 2000 || (!$targetUserId && !$messageId)) {
+            pc_json(422, ['ok' => false, 'error' => 'invalid_report']);
+        }
+        if ($messageId) {
+            $check = pc_db()->prepare('SELECT 1 FROM messages m JOIN conversation_members cm ON cm.conversation_id = m.conversation_id WHERE m.id = ? AND cm.user_id = ?');
+            $check->execute([$messageId, $user['id']]);
+            if (!$check->fetchColumn()) pc_json(404, ['ok' => false, 'error' => 'message_not_found']);
+        }
+        pc_db()->prepare('INSERT INTO reports (reporter_id, target_user_id, message_id, reason, details) VALUES (?, ?, ?, ?, ?)')
+            ->execute([$user['id'], $targetUserId ?: null, $messageId ?: null, $reason, $details]);
+        pc_json(201, ['ok' => true, 'report_submitted' => true]);
     }
 
     pc_json(404, ['ok' => false, 'error' => 'endpoint_not_found', 'path' => $path]);
