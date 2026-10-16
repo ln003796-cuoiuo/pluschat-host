@@ -70,6 +70,18 @@ if (!$alreadyConfigured && ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
                 }
             }
 
+            // Upgrade an existing database too: importing schema.sql alone cannot add
+            // columns to a users table that already exists.
+            $migrationPath = dirname(__DIR__) . '/database/migrations/008_textbee_phone_verification.sql';
+            $migration = is_file($migrationPath) ? file_get_contents($migrationPath) : false;
+            if ($migration === false || trim($migration) === '') {
+                throw new RuntimeException('Phone verification migration unavailable');
+            }
+            foreach (explode(';', $migration) as $statement) {
+                $statement = trim($statement);
+                if ($statement !== '') $pdo->exec($statement);
+            }
+
             $requiredTables = [
                 'users', 'email_verification_tokens', 'auth_tokens', 'conversations',
                 'conversation_members', 'messages', 'user_settings', 'user_devices',
@@ -77,7 +89,7 @@ if (!$alreadyConfigured && ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
                 'channel_members', 'topics', 'topic_messages', 'message_attachments',
                 'message_receipts', 'message_reactions', 'reports', 'admin_users',
                 'notifications', 'group_messages', 'channel_posts', 'api_rate_limits',
-                'user_crypto_keys', 'calls', 'call_signals', 'friend_requests', 'friendships', 'saved_messages', 'polls', 'poll_options', 'poll_votes', 'chat_preferences', 'chat_folders', 'chat_folder_items', 'stories', 'story_views', 'password_reset_tokens', 'message_hidden', 'user_two_factor', 'two_factor_setups', 'two_factor_challenges', 'user_avatars',
+                'user_crypto_keys', 'calls', 'call_signals', 'friend_requests', 'friendships', 'saved_messages', 'polls', 'poll_options', 'poll_votes', 'chat_preferences', 'chat_folders', 'chat_folder_items', 'stories', 'story_views', 'password_reset_tokens', 'message_hidden', 'user_two_factor', 'two_factor_setups', 'two_factor_challenges', 'user_avatars', 'phone_verification_codes',
             ];
             $tableCheck = $pdo->prepare(
                 'SELECT COUNT(*) FROM information_schema.tables
@@ -97,6 +109,8 @@ if (!$alreadyConfigured && ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
                 'db_name' => $name,
                 'db_user' => $user,
                 'db_password' => $password,
+                // Set privately by the hosting environment if configured. Never commit API keys.
+                'textbee_api_key' => (string)(getenv('PLUSCHAT_TEXTBEE_API_KEY') ?: ''),
                 'app_secret' => bin2hex(random_bytes(32)),
                 'mail_from' => 'register@плюсчат.рф',
                 'app_base_url' => 'https://xn--80avljg2a1c.xn--p1ai',
