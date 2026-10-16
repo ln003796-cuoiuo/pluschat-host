@@ -6,6 +6,7 @@ final class PCRegistrationValidator
     public static function validate(array $data): array
     {
         $email = strtolower(is_string($data['email'] ?? null) ? trim($data['email']) : '');
+        $phone = is_string($data['phone'] ?? null) ? preg_replace('/[\\s().-]+/', '', trim($data['phone'])) : '';
         $username = is_string($data['username'] ?? null) ? trim($data['username']) : '';
         $password = is_string($data['password'] ?? null) ? $data['password'] : '';
         $firstName = is_string($data['first_name'] ?? null) ? trim($data['first_name']) : '';
@@ -14,6 +15,9 @@ final class PCRegistrationValidator
 
         if (!filter_var($email, FILTER_VALIDATE_EMAIL) || pc_len($email) > 254) {
             return ['error' => 'invalid_email'];
+        }
+        if (!is_string($phone) || !preg_match('/^\\+[1-9][0-9]{7,14}$/', $phone)) {
+            return ['error' => 'invalid_phone', 'message' => 'Укажи номер в международном формате, например +491234567890.'];
         }
         if (!preg_match('/^[A-Za-z0-9_]{3,32}$/', $username)) {
             return ['error' => 'invalid_username', 'message' => 'Имя пользователя: 3–32 символа, латинские буквы, цифры и _.'];
@@ -36,6 +40,7 @@ final class PCRegistrationValidator
 
         return [
             'email' => $email,
+            'phone' => $phone,
             'username' => $username,
             'password' => $password,
             'first_name' => $firstName,
