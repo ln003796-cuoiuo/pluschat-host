@@ -293,3 +293,57 @@ CREATE TABLE IF NOT EXISTS api_rate_limits (
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX idx_rate_limit_updated (updated_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Security foundation: public key material only. Private keys must remain on clients.
+CREATE TABLE IF NOT EXISTS user_crypto_keys (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    user_id BIGINT UNSIGNED NOT NULL,
+    device_key_hash CHAR(64) NOT NULL,
+    identity_public_key TEXT NOT NULL,
+    signed_prekey TEXT NOT NULL,
+    signed_prekey_signature TEXT NOT NULL,
+    key_version VARCHAR(32) NOT NULL DEFAULT 'pc-e2ee-v1',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_crypto_user_device (user_id, device_key_hash),
+    INDEX idx_crypto_user (user_id),
+    CONSTRAINT fk_crypto_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- One-to-one call metadata. Audio/video itself is transported peer-to-peer by WebRTC.
+CREATE TABLE IF NOT EXISTS calls (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    conversation_id BIGINT UNSIGNED NOT NULL,
+    caller_id BIGINT UNSIGNED NOT NULL,
+    callee_id BIGINT UNSIGNED NOT NULL,
+    call_type ENUM('audio','video') NOT NULL,
+    status ENUM('ringing','accepted','declined','missed','ended','failed') NOT NULL DEFAULT 'ringing',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    answered_at DATETIME NULL,
+    ended_at DATETIME NULL,
+    expires_at DATETIME NOT NULL,
+    INDEX idx_calls_caller (caller_id, created_at),
+    INDEX idx_calls_callee (callee_id, status, created_at),
+    INDEX idx_calls_expiry (expires_at),
+    CONSTRAINT fk_calls_conversation FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE,
+    CONSTRAINT fk_calls_caller FOREIGN KEY (caller_id) REFERENCES users(id) ON DELETE CASCADE,
+    CONSTRAINT fk_calls_callee FOREIGN KEY (callee_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Short-lived WebRTC signaling only; never store audio/video recordings here.
+CREATE TABLE IF NOT EXISTS call_signals (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    call_id BIGINT UNSIGNED NOT NULL,
+    sender_id BIGINT UNSIGNED NOT NULL,
+    recipient_id BIGINT UNSIGNED NOT NULL,
+    signal_type ENUM('offer','answer','ice-candidate','decline','hangup') NOT NULL,
+    payload MEDIUMTEXT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    expires_at DATETIME NOT NULL,
+    INDEX idx_call_signals_poll (call_id, recipient_id, id),
+    INDEX idx_call_signals_expiry (expires_at),
+    CONSTRAINT fk_signal_call FOREIGN KEY (call_id) REFERENCES calls(id) ON DELETE CASCADE,
+    CONSTRAINT fk_signal_sender FOREIGN KEY (sender_id) REFERENCES users(id) ON DELETE CASCADE,
+    CONSTRAINT fk_signal_recipient FOREIGN KEY (recipient_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
