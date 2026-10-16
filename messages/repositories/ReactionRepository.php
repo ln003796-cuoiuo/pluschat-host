@@ -5,7 +5,7 @@ final class PCReactionRepository
 {
     public static function canReact(PDO $pdo, int $userId, int $messageId): bool
     {
-        $stmt = $pdo->prepare('SELECT 1 FROM messages m JOIN conversation_members cm ON cm.conversation_id = m.conversation_id WHERE m.id = ? AND cm.user_id = ? LIMIT 1');
+        $stmt = $pdo->prepare('SELECT 1 FROM messages m JOIN conversation_members cm ON cm.conversation_id = m.conversation_id WHERE m.id = ? AND cm.user_id = ? AND NOT EXISTS (SELECT 1 FROM message_hidden h WHERE h.message_id = m.id AND h.user_id = cm.user_id) LIMIT 1');
         $stmt->execute([$messageId, $userId]);
         return (bool)$stmt->fetchColumn();
     }
