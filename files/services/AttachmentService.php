@@ -20,8 +20,9 @@ final class PCAttachmentService
         }
         $meta = PCAttachmentValidator::validateUpload($post, $files);
         if (isset($meta['error'])) {
-            unset($meta['size'], $meta['original_name'], $meta['mime_type'], $meta['tmp_name']);
-            return ['status' => $meta['status'], 'body' => ['ok' => false] + $meta];
+            $status = (int)$meta['status'];
+            unset($meta['status']);
+            return ['status' => $status, 'body' => ['ok' => false] + $meta];
         }
         $directory = self::storageDirectory();
         if (!is_dir($directory) && !mkdir($directory, 0700, true) && !is_dir($directory)) {
