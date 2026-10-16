@@ -7,9 +7,29 @@ declare(strict_types=1);
  * are loaded by public/index.php through bootstrap.php.
  */
 require_once dirname(__DIR__) . '/services/ProfileService.php';
+require_once dirname(__DIR__) . '/services/AvatarService.php';
 
 function pc_profile_dispatch(string $path, string $method): bool
 {
+    if ($path === '/api/v1/me/avatar' && $method === 'POST') {
+        pc_rate_limit('avatar-upload', 10, 3600);
+        $user = pc_require_verified_user();
+        $result = PCProfileAvatarService::upload((int)$user['id'], $_FILES);
+        pc_json($result['status'], $result['body']);
+    }
+
+    if ($path === '/api/v1/me/avatar' && $method === 'GET') {
+        $user = pc_require_verified_user();
+        $result = PCProfileAvatarService::findForUser((int)$user['id']);
+        if (isset($result['status'])) pc_json($result['status'], $result['body']);
+        header('Content-Type: ' . $result['mime_type']);
+        header('Content-Length: ' . (string)$result['size']);
+        header('Content-Disposition: inline; filename="pluschat-avatar"');
+        header('X-Content-Type-Options: nosniff');
+        header('Cache-Control: private, no-store');
+        readfile($result['path']);
+        exit;
+    }
     if ($path === '/api/v1/auth/profile' && $method === 'POST') {
         $user = pc_require_verified_user();
         $result = PCProfileService::update((int)$user['id'], pc_input());
