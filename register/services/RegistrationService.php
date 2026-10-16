@@ -19,8 +19,8 @@ final class PCRegistrationService
             return ['status' => 409, 'body' => ['ok' => false, 'error' => 'email_or_username_taken']];
         }
 
-        $token = PCRegistrationRepository::create($pdo, $user);
-        $sent = PCVerificationMailer::send($user['email'], $user['username'], $token);
+        $code = PCRegistrationRepository::create($pdo, $user);
+        $sent = PCVerificationMailer::send($user['email'], $user['username'], $code);
         return [
             'status' => 201,
             'body' => [
@@ -28,7 +28,7 @@ final class PCRegistrationService
                 'registered' => true,
                 'email_verification_sent' => $sent,
                 'message' => $sent
-                    ? 'Регистрация создана. Проверьте почту и подтвердите адрес.'
+                    ? 'Регистрация создана. Введите шестизначный код из письма. Код действует 15 минут.'
                     : 'Аккаунт создан, но письмо не отправлено. Проверьте настройки почты на хостинге и запросите письмо повторно.',
             ],
         ];
