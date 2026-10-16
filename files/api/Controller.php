@@ -6,6 +6,7 @@ require_once dirname(__DIR__) . '/services/AttachmentService.php';
 function pc_files_dispatch(string $path, string $method): bool
 {
     if (preg_match('#^/api/v1/messages/([0-9]+)/attachments$#', $path, $matches) && $method === 'POST') {
+        pc_rate_limit('attachment-upload', 20, 3600);
         $user = pc_require_verified_user();
         $result = PCAttachmentService::upload((int)$user['id'], (int)$matches[1], $_POST, $_FILES);
         pc_json($result['status'], $result['body']);
