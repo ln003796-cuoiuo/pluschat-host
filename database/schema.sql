@@ -331,7 +331,7 @@ CREATE TABLE IF NOT EXISTS calls (
     CONSTRAINT fk_calls_callee FOREIGN KEY (callee_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Short-lived WebRTC signaling only; never store audio/video recordings here.
+-- Short-lived WebRTC signaling only. Never store audio/video recordings here.
 CREATE TABLE IF NOT EXISTS call_signals (
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
     call_id BIGINT UNSIGNED NOT NULL,
