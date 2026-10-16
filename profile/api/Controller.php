@@ -6,46 +6,15 @@ declare(strict_types=1);
  * Business logic remains in this feature module; shared HTTP/database helpers
  * are loaded by public/index.php through bootstrap.php.
  */
+require_once dirname(__DIR__) . '/services/ProfileService.php';
+
 function pc_profile_dispatch(string $path, string $method): bool
 {
     if ($path === '/api/v1/auth/profile' && $method === 'POST') {
-            $user = pc_require_verified_user();
-            $data = pc_input();
-            $updates = [];
-            $values = [];
-    
-            foreach (['first_name' => 80, 'last_name' => 80] as $field => $maxLength) {
-                if (array_key_exists($field, $data)) {
-                    if (!is_string($data[$field]) || pc_len(trim($data[$field])) > $maxLength) {
-                        pc_json(422, ['ok' => false, 'error' => 'invalid_' . $field]);
-                    }
-                    $updates[] = $field . ' = ?';
-                    $values[] = trim($data[$field]);
-                }
-            }
-    
-            if (array_key_exists('birth_date', $data)) {
-                $birthDate = is_string($data['birth_date']) ? trim($data['birth_date']) : '';
-                if ($birthDate === '') {
-                    $updates[] = 'birth_date = NULL';
-                } else {
-                    $date = DateTimeImmutable::createFromFormat('!Y-m-d', $birthDate);
-                    if (!$date || $date->format('Y-m-d') !== $birthDate || $date > new DateTimeImmutable('today')) {
-                        pc_json(422, ['ok' => false, 'error' => 'invalid_birth_date']);
-                    }
-                    $updates[] = 'birth_date = ?';
-                    $values[] = $birthDate;
-                }
-            }
-    
-            if (!$updates) pc_json(422, ['ok' => false, 'error' => 'no_profile_fields']);
-            $values[] = $user['id'];
-            $pdo = pc_db();
-            $pdo->prepare('UPDATE users SET ' . implode(', ', $updates) . ' WHERE id = ?')->execute($values);
-            $stmt = $pdo->prepare('SELECT id, email, username, first_name, last_name, birth_date, email_verified_at, created_at FROM users WHERE id = ?');
-            $stmt->execute([$user['id']]);
-            pc_json(200, ['ok' => true, 'user' => pc_public_user($stmt->fetch())]);
-        }
+        $user = pc_require_verified_user();
+        $result = PCProfileService::update((int)$user['id'], pc_input());
+        pc_json($result['status'], $result['body']);
+    }
 
     if ($path === '/api/v1/birthdays' && $method === 'GET') {
             $user = pc_require_verified_user();
