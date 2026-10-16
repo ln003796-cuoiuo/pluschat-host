@@ -70,6 +70,28 @@ if (!$alreadyConfigured && ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
                 }
             }
 
+            $requiredTables = [
+                'users', 'email_verification_tokens', 'auth_tokens', 'conversations',
+                'conversation_members', 'messages', 'user_settings', 'user_devices',
+                'user_blocks', 'chat_groups', 'group_members', 'channels',
+                'channel_members', 'topics', 'topic_messages', 'message_attachments',
+                'message_receipts', 'message_reactions', 'reports', 'admin_users',
+                'notifications', 'group_messages', 'channel_posts', 'api_rate_limits',
+                'user_crypto_keys', 'calls', 'call_signals',
+            ];
+            $tableCheck = $pdo->prepare(
+                'SELECT COUNT(*) FROM information_schema.tables
+                 WHERE table_schema = DATABASE() AND table_name = ?'
+            );
+            $missingTables = [];
+            foreach ($requiredTables as $table) {
+                $tableCheck->execute([$table]);
+                if ((int)$tableCheck->fetchColumn() !== 1) $missingTables[] = $table;
+            }
+            if ($missingTables !== []) {
+                throw new RuntimeException('Schema verification failed. Missing tables: ' . implode(', ', $missingTables));
+            }
+
             $config = [
                 'db_host' => $host,
                 'db_name' => $name,
