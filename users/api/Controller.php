@@ -6,49 +6,27 @@ declare(strict_types=1);
  * Business logic remains in this feature module; shared HTTP/database helpers
  * are loaded by public/index.php through bootstrap.php.
  */
+require_once dirname(__DIR__) . '/services/UserService.php';
+
 function pc_users_dispatch(string $path, string $method): bool
 {
     if ($path === '/api/v1/users/search' && $method === 'GET') {
-            $user = pc_require_verified_user();
-            $query = trim((string)($_GET['q'] ?? ''));
-            if (pc_len($query) < 2 || pc_len($query) > 64) {
-                pc_json(422, ['ok' => false, 'error' => 'query_must_be_2_to_64_characters']);
-            }
-            $like = '%' . addcslashes($query, '%_\\') . '%';
-            $stmt = pc_db()->prepare("SELECT u.id, u.username, u.first_name, u.last_name
-                FROM users u LEFT JOIN user_settings s ON s.user_id = u.id
-                WHERE u.id <> ? AND (u.username LIKE ? OR u.first_name LIKE ? OR u.last_name LIKE ?)
-                  AND COALESCE(s.profile_visibility, 'everyone') <> 'nobody'
-                  AND (COALESCE(s.profile_visibility, 'everyone') <> 'contacts' OR EXISTS (
-                      SELECT 1 FROM conversation_members mine
-                      JOIN conversation_members theirs ON theirs.conversation_id = mine.conversation_id
-                      WHERE mine.user_id = ? AND theirs.user_id = u.id
-                  ))
-                  AND NOT EXISTS (SELECT 1 FROM user_blocks b WHERE (b.user_id = ? AND b.blocked_user_id = u.id) OR (b.user_id = u.id AND b.blocked_user_id = ?))
-                ORDER BY u.username LIMIT 30");
-            $stmt->execute([$user['id'], $like, $like, $like, $user['id'], $user['id'], $user['id']]);
-            pc_json(200, ['ok' => true, 'users' => array_map(static fn(array $u): array => [
-                'id' => (string)$u['id'], 'username' => $u['username'],
-                'first_name' => $u['first_name'], 'last_name' => $u['last_name'],
-            ], $stmt->fetchAll())]);
-        }
-
-    if (preg_match('#^/api/v1/users/([0-9]+)/unblock$#', $path, $matches) && $method === 'POST') {
-                $user = pc_require_verified_user();
-                $targetId = (int)$matches[1];
-                pc_db()->prepare('DELETE FROM user_blocks WHERE user_id = ? AND blocked_user_id = ?')->execute([$user['id'], $targetId]);
-                pc_json(200, ['ok' => true, 'blocked' => false]);
-            }
+        $user = pc_require_verified_user();
+        $result = PCUserService::search((int)$user['id'], $_GET['q'] ?? null);
+        pc_json($result['status'], $result['body']);
+    }
 
     if (preg_match('#^/api/v1/users/([0-9]+)/block$#', $path, $matches) && $method === 'POST') {
-                $user = pc_require_verified_user();
-                $targetId = (int)$matches[1];
-                if ($targetId < 1 || $targetId === (int)$user['id']) pc_json(422, ['ok' => false, 'error' => 'invalid_block_target']);
-                $target = pc_db()->prepare('SELECT id FROM users WHERE id = ?');
-                $target->execute([$targetId]);
-                if (!$target->fetch()) pc_json(404, ['ok' => false, 'error' => 'user_not_found']);
-                pc_db()->prepare('INSERT IGNORE INTO user_blocks (user_id, blocked_user_id) VALUES (?, ?)')->execute([$user['id'], $targetId]);
-                pc_json(200, ['ok' => true, 'blocked' => true]);
-            }
+        $user = pc_require_verified_user();
+        $result = PCUserService::block((int)$user['id'], (int)$matches[1]);
+        pc_json($result['status'], $result['body']);
+    }
+
+    if (preg_match('#^/api/v1/users/([0-9]+)/unblock$#', $path, $matches) && $method === 'POST') {
+        $user = pc_require_verified_user();
+        $result = PCUserService::unblock((int)$user['id'], (int)$matches[1]);
+        pc_json($result['status'], $result['body']);
+    }
+
     return false;
 }
