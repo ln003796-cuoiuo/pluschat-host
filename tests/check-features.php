@@ -27,6 +27,8 @@ $required = [
     'password/mail/Mailer.php',
     'database/migrations/004_password_recovery.sql',
     'database/migrations/005_message_hiding.sql',
+    'database/migrations/006_mandatory_two_factor.sql',
+    'security/services/TwoFactorService.php',
     'public/password-reset.php',
     'database/migrate.php',
     'database/cleanup.php',
@@ -49,6 +51,17 @@ $registrationRepository = (string)file_get_contents($root . '/register/repositor
 if (!str_contains($registrationRepository, 'confirmCode') || !str_contains($registrationRepository, 'INTERVAL 15 MINUTE')) $errors[] = 'Short-lived email verification code flow is missing';
 $registrationMailer = (string)file_get_contents($root . '/register/mail/mailconfirm/Mailer.php');
 if (!str_contains($registrationMailer, 'Код подтверждения Pluschat')) $errors[] = 'Email verification code mailer is missing';
+$twoFactorService = (string)file_get_contents($root . '/security/services/TwoFactorService.php');
+if (!str_contains($twoFactorService, 'sodium_crypto_secretbox') || !str_contains($twoFactorService, 'verifyCode')) $errors[] = 'Encrypted TOTP secret storage or TOTP validation is missing';
+$loginService = (string)file_get_contents($root . '/login/services/LoginService.php');
+if (!str_contains($loginService, 'requires_2fa_setup') || !str_contains($loginService, 'requires_2fa')) $errors[] = 'Mandatory 2FA login flow is missing';
+$securityController = (string)file_get_contents($root . '/security/api/Controller.php');
+foreach (['/api/v1/auth/2fa/setup','/api/v1/auth/2fa/confirm','/api/v1/auth/2fa/verify','two_factor_is_mandatory'] as $route) {
+    if (!str_contains($securityController, $route)) $errors[] = '2FA route missing: ' . $route;
+}
+$bootstrap = (string)file_get_contents($root . '/bootstrap.php');
+if (!str_contains($bootstrap, 'two_factor_setup_required')) $errors[] = 'Authenticated API does not enforce mandatory 2FA enrollment';
+
 $registrationController = (string)file_get_contents($root . '/register/api/Controller.php');
 if (!str_contains($registrationController, 'confirmCode')) $errors[] = 'Email code verification route is missing';
 
