@@ -32,5 +32,23 @@ function pc_users_dispatch(string $path, string $method): bool
                 'first_name' => $u['first_name'], 'last_name' => $u['last_name'],
             ], $stmt->fetchAll())]);
         }
+
+    if (preg_match('#^/api/v1/users/([0-9]+)/unblock$#', $path, $matches) && $method === 'POST') {
+                $user = pc_require_verified_user();
+                $targetId = (int)$matches[1];
+                pc_db()->prepare('DELETE FROM user_blocks WHERE user_id = ? AND blocked_user_id = ?')->execute([$user['id'], $targetId]);
+                pc_json(200, ['ok' => true, 'blocked' => false]);
+            }
+
+    if (preg_match('#^/api/v1/users/([0-9]+)/block$#', $path, $matches) && $method === 'POST') {
+                $user = pc_require_verified_user();
+                $targetId = (int)$matches[1];
+                if ($targetId < 1 || $targetId === (int)$user['id']) pc_json(422, ['ok' => false, 'error' => 'invalid_block_target']);
+                $target = pc_db()->prepare('SELECT id FROM users WHERE id = ?');
+                $target->execute([$targetId]);
+                if (!$target->fetch()) pc_json(404, ['ok' => false, 'error' => 'user_not_found']);
+                pc_db()->prepare('INSERT IGNORE INTO user_blocks (user_id, blocked_user_id) VALUES (?, ?)')->execute([$user['id'], $targetId]);
+                pc_json(200, ['ok' => true, 'blocked' => true]);
+            }
     return false;
 }

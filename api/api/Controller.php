@@ -116,23 +116,9 @@ function pc_misc_api_dispatch(string $path, string $method): bool
             pc_json(201, ['ok' => true, 'message' => ['id' => (string)pc_db()->lastInsertId(), 'topic_id' => (string)$topicId, 'sender_id' => (string)$user['id'], 'body' => $body, 'encrypted' => (bool)$encrypted, 'created_at' => gmdate('Y-m-d H:i:s')]]);
         }
 
-    if (preg_match('#^/api/v1/users/([0-9]+)/block$#', $path, $matches) && $method === 'POST') {
-            $user = pc_require_verified_user();
-            $targetId = (int)$matches[1];
-            if ($targetId < 1 || $targetId === (int)$user['id']) pc_json(422, ['ok' => false, 'error' => 'invalid_block_target']);
-            $target = pc_db()->prepare('SELECT id FROM users WHERE id = ?');
-            $target->execute([$targetId]);
-            if (!$target->fetch()) pc_json(404, ['ok' => false, 'error' => 'user_not_found']);
-            pc_db()->prepare('INSERT IGNORE INTO user_blocks (user_id, blocked_user_id) VALUES (?, ?)')->execute([$user['id'], $targetId]);
-            pc_json(200, ['ok' => true, 'blocked' => true]);
-        }
+    
 
-    if (preg_match('#^/api/v1/users/([0-9]+)/unblock$#', $path, $matches) && $method === 'POST') {
-            $user = pc_require_verified_user();
-            $targetId = (int)$matches[1];
-            pc_db()->prepare('DELETE FROM user_blocks WHERE user_id = ? AND blocked_user_id = ?')->execute([$user['id'], $targetId]);
-            pc_json(200, ['ok' => true, 'blocked' => false]);
-        }
+    
 
     if (preg_match('#^/api/v1/topics/([0-9]+)/convert-to-channel$#', $path, $matches) && $method === 'POST') {
             $user = pc_require_verified_user();
