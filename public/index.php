@@ -80,7 +80,7 @@ try {
             'channel_members', 'topics', 'topic_messages', 'message_attachments',
             'message_receipts', 'message_reactions', 'reports', 'admin_users',
             'notifications', 'group_messages', 'channel_posts', 'api_rate_limits',
-            'user_crypto_keys', 'calls', 'call_signals', 'friend_requests', 'friendships', 'saved_messages', 'polls', 'poll_options', 'poll_votes', 'chat_preferences', 'chat_folders', 'chat_folder_items',
+            'user_crypto_keys', 'calls', 'call_signals', 'friend_requests', 'friendships', 'saved_messages', 'polls', 'poll_options', 'poll_votes', 'chat_preferences', 'chat_folders', 'chat_folder_items', 'stories', 'story_views',
         ];
         $stmt = $pdo->prepare(
             'SELECT COUNT(*) FROM information_schema.tables
