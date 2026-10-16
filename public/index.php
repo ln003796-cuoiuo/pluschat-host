@@ -191,6 +191,10 @@ try {
         $login = strtolower(pc_string($data, 'login'));
         if ($login === '') $login = strtolower(pc_string($data, 'email'));
         $password = is_string($data['password'] ?? null) ? $data['password'] : '';
+        $deviceKey = pc_string($data, 'device_key');
+        $deviceName = pc_string($data, 'device_name') ?: 'Unknown device';
+        $platform = pc_string($data, 'platform') ?: 'unknown';
+        if ($deviceKey !== '' && (!preg_match('/^[a-f0-9]{32,128}$/i', $deviceKey) || pc_len($deviceName) > 120 || pc_len($platform) > 40)) pc_json(422, ['ok' => false, 'error' => 'invalid_device_details']);
         $stmt = pc_db()->prepare('SELECT id, email, username, password_hash, first_name, last_name, birth_date, email_verified_at, created_at FROM users WHERE email = ? OR username = ? LIMIT 1');
         $stmt->execute([$login, $login]);
         $user = $stmt->fetch();
@@ -203,8 +207,14 @@ try {
         $token = bin2hex(random_bytes(32));
         $expiresAt = (new DateTimeImmutable('now', new DateTimeZone('UTC')))->modify('+30 days')->format('Y-m-d H:i:s');
         $pdo = pc_db();
-        $pdo->prepare('INSERT INTO auth_tokens (user_id, token_hash, expires_at) VALUES (?, ?, ?)')
-            ->execute([$user['id'], hash('sha256', $token), $expiresAt]);
+        $deviceHash = null;
+        if ($deviceKey !== '') {
+            $deviceHash = hash('sha256', $deviceKey);
+            $pdo->prepare('INSERT INTO user_devices (user_id, device_key_hash, device_name, platform, last_seen_at, revoked_at) VALUES (?, ?, ?, ?, UTC_TIMESTAMP(), NULL) ON DUPLICATE KEY UPDATE device_name = VALUES(device_name), platform = VALUES(platform), last_seen_at = UTC_TIMESTAMP(), revoked_at = NULL')
+                ->execute([$user['id'], $deviceHash, $deviceName, $platform]);
+        }
+        $pdo->prepare('INSERT INTO auth_tokens (user_id, token_hash, device_key_hash, expires_at) VALUES (?, ?, ?, ?)')
+            ->execute([$user['id'], hash('sha256', $token), $deviceHash, $expiresAt]);
         pc_json(200, ['ok' => true, 'token' => $token, 'token_type' => 'Bearer', 'expires_at' => $expiresAt, 'user' => pc_public_user($user)]);
     }
 
@@ -336,6 +346,18 @@ try {
         ], $stmt->fetchAll())]);
     }
 
+
+    if (preg_match('#^/api/v1/conversations/([0-9]+)/read$#', $path, $matches) && $method === 'POST') {
+        $user = pc_require_verified_user();
+        $conversationId = (int)$matches[1];
+        $member = pc_db()->prepare('SELECT 1 FROM conversation_members WHERE conversation_id = ? AND user_id = ?');
+        $member->execute([$conversationId, $user['id']]);
+        if (!$member->fetchColumn()) pc_json(404, ['ok' => false, 'error' => 'conversation_not_found']);
+        $stmt = pc_db()->prepare('INSERT INTO message_receipts (message_id, user_id, delivered_at, read_at) SELECT id, ?, UTC_TIMESTAMP(), UTC_TIMESTAMP() FROM messages WHERE conversation_id = ? AND sender_id <> ? ON DUPLICATE KEY UPDATE delivered_at = COALESCE(delivered_at, VALUES(delivered_at)), read_at = VALUES(read_at)');
+        $stmt->execute([$user['id'], $conversationId, $user['id']]);
+        pc_json(200, ['ok' => true, 'marked_read' => $stmt->rowCount()]);
+    }
+
     if (preg_match('#^/api/v1/conversations/(\d+)/messages$#', $path, $matches)) {
         $user = pc_require_verified_user();
         $conversationId = (int)$matches[1];
@@ -374,6 +396,44 @@ try {
         pc_json(405, ['ok' => false, 'error' => 'method_not_allowed']);
     }
 
+
+
+    if ($path === '/api/v1/devices' && $method === 'GET') {
+        $user = pc_require_verified_user();
+        $stmt = pc_db()->prepare('SELECT id, device_name, platform, last_seen_at, created_at FROM user_devices WHERE user_id = ? AND revoked_at IS NULL ORDER BY last_seen_at DESC');
+        $stmt->execute([$user['id']]);
+        pc_json(200, ['ok' => true, 'devices' => $stmt->fetchAll()]);
+    }
+
+    if (preg_match('#^/api/v1/devices/([0-9]+)/revoke$#', $path, $matches) && $method === 'POST') {
+        $user = pc_require_verified_user();
+        $deviceId = (int)$matches[1];
+        $stmt = pc_db()->prepare('SELECT device_key_hash FROM user_devices WHERE id = ? AND user_id = ? AND revoked_at IS NULL LIMIT 1');
+        $stmt->execute([$deviceId, $user['id']]);
+        $device = $stmt->fetch();
+        if (!$device) pc_json(404, ['ok' => false, 'error' => 'device_not_found']);
+        $pdo = pc_db();
+        $pdo->beginTransaction();
+        try {
+            $pdo->prepare('UPDATE user_devices SET revoked_at = UTC_TIMESTAMP() WHERE id = ? AND user_id = ?')->execute([$deviceId, $user['id']]);
+            $pdo->prepare('DELETE FROM auth_tokens WHERE user_id = ? AND device_key_hash = ?')->execute([$user['id'], $device['device_key_hash']]);
+            $pdo->commit();
+        } catch (Throwable $e) {
+            if ($pdo->inTransaction()) $pdo->rollBack();
+            throw $e;
+        }
+        pc_json(200, ['ok' => true, 'revoked' => true]);
+    }
+
+    if ($path === '/api/v1/auth/sessions/revoke-others' && $method === 'POST') {
+        $user = pc_require_verified_user();
+        $header = $_SERVER['HTTP_AUTHORIZATION'] ?? '';
+        preg_match('/^Bearer\\s+([a-f0-9]{64})$/i', $header, $matches);
+        $currentHash = hash('sha256', $matches[1]);
+        $stmt = pc_db()->prepare('DELETE FROM auth_tokens WHERE user_id = ? AND token_hash <> ?');
+        $stmt->execute([$user['id'], $currentHash]);
+        pc_json(200, ['ok' => true, 'revoked_sessions' => $stmt->rowCount()]);
+    }
 
     if ($path === '/api/v1/settings' && ($method === 'GET' || $method === 'POST')) {
         $user = pc_require_verified_user();
