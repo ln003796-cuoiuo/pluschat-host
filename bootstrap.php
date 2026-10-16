@@ -60,6 +60,46 @@ function pc_require_method(string $method): void {
     }
 }
 
+/**
+ * Validate an opaque client-encrypted envelope without decrypting it.
+ * Plaintext messages are deliberately rejected by write endpoints.
+ */
+function pc_encrypted_envelope(mixed $body): ?array {
+    if (!is_string($body) || $body === '' || strlen($body) > 100000) return null;
+    $envelope = json_decode($body, true);
+    if (!is_array($envelope)
+        || ($envelope['v'] ?? null) !== 'pc-e2ee-v1'
+        || ($envelope['alg'] ?? null) !== 'AES-256-GCM'
+        || !is_string($envelope['nonce'] ?? null)
+        || !is_string($envelope['ciphertext'] ?? null)
+        || !is_string($envelope['key_id'] ?? null)
+        || !preg_match('/^[A-Za-z0-9._:-]{1,128}$/', $envelope['key_id'])) {
+        return null;
+    }
+    $decode = static function (string $value): string|false {
+        if ($value === '' || !preg_match('/^[A-Za-z0-9_-]+$/', $value)) return false;
+        $padded = strtr($value, '-_', '+/');
+        $padded .= str_repeat('=', (4 - strlen($padded) % 4) % 4);
+        return base64_decode($padded, true);
+    };
+    $nonce = $decode($envelope['nonce']);
+    $ciphertext = $decode($envelope['ciphertext']);
+    if ($nonce === false || strlen($nonce) !== 12
+        || $ciphertext === false || strlen($ciphertext) < 16 || strlen($ciphertext) > 64000) {
+        return null;
+    }
+    return [
+        'body' => json_encode([
+            'v' => 'pc-e2ee-v1',
+            'alg' => 'AES-256-GCM',
+            'nonce' => $envelope['nonce'],
+            'ciphertext' => $envelope['ciphertext'],
+            'key_id' => $envelope['key_id'],
+        ], JSON_UNESCAPED_SLASHES),
+        'version' => 'pc-e2ee-v1',
+    ];
+}
+
 function pc_token_user(): array {
     $header = $_SERVER['HTTP_AUTHORIZATION'] ?? '';
     if (!preg_match('/^Bearer\s+([a-f0-9]{64})$/i', $header, $matches)) {
