@@ -1,0 +1,28 @@
+name: PHP server checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  php-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathai/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: pdo_mysql, sodium, mbstring
+          coverage: none
+      - name: Syntax-check PHP files
+        shell: bash
+        run: |
+          set -euo pipefail
+          while IFS= read -r -d '' file; do php -l "$file"; done < <(find . -type f -name '*.php' -not -path './.git/*' -print0)
+      - name: Check server modules
+        run: php tests/check-server.php
