@@ -12,6 +12,12 @@ function pc_files_dispatch(string $path, string $method): bool
         pc_json($result['status'], $result['body']);
     }
 
+    if (preg_match('#^/api/v1/attachments/([0-9]+)/delete$#', $path, $matches) && $method === 'POST') {
+        $user = pc_require_verified_user();
+        $result = PCAttachmentService::delete((int)$user['id'], (int)$matches[1]);
+        pc_json($result['status'], $result['body']);
+    }
+
     if (preg_match('#^/api/v1/attachments/([0-9]+)$#', $path, $matches) && $method === 'GET') {
         $user = pc_require_verified_user();
         $result = PCAttachmentService::download((int)$user['id'], (int)$matches[1]);
