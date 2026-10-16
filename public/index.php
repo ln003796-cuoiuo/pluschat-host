@@ -796,8 +796,8 @@ try {
     if (preg_match('#^/api/v1/messages/([0-9]+)/attachments$#', $path, $matches) && $method === 'POST') {
         $user = pc_require_verified_user();
         $messageId = (int)$matches[1];
-        $stmt = pc_db()->prepare('SELECT m.id, m.sender_id, m.conversation_id FROM messages m JOIN conversation_members cm ON cm.conversation_id = m.conversation_id WHERE m.id = ? AND cm.user_id = ? LIMIT 1');
-        $stmt->execute([$messageId, $user['id']]);
+        $stmt = pc_db()->prepare('SELECT m.id, m.sender_id, m.conversation_id FROM messages m JOIN conversation_members cm ON cm.conversation_id = m.conversation_id WHERE m.id = ? AND cm.user_id = ? AND m.sender_id = ? LIMIT 1');
+        $stmt->execute([$messageId, $user['id'], $user['id']]);
         if (!$stmt->fetch()) pc_json(404, ['ok' => false, 'error' => 'message_not_found']);
         if (($_POST['encrypted'] ?? '') !== '1' || !isset($_FILES['file']) || !is_array($_FILES['file'])) {
             pc_json(422, ['ok' => false, 'error' => 'encrypted_file_required', 'message' => 'Upload client-encrypted file bytes with encrypted=1.']);
