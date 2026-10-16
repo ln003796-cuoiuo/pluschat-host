@@ -34,7 +34,10 @@ final class PCNotificationRepository
     {
         $stmt = $pdo->prepare('UPDATE notifications SET read_at = COALESCE(read_at, UTC_TIMESTAMP()) WHERE id = ? AND user_id = ?');
         $stmt->execute([$notificationId, $userId]);
-        return $stmt->rowCount() > 0;
+        if ($stmt->rowCount() > 0) return true;
+        $check = $pdo->prepare('SELECT 1 FROM notifications WHERE id = ? AND user_id = ? LIMIT 1');
+        $check->execute([$notificationId, $userId]);
+        return (bool)$check->fetchColumn();
     }
 
     public static function markAllRead(PDO $pdo, int $userId): int
