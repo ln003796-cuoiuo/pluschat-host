@@ -60,3 +60,191 @@ CREATE TABLE IF NOT EXISTS messages (
     INDEX idx_messages_conversation_id (conversation_id, id),
     INDEX idx_messages_sender (sender_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+-- Pluschat extended product features: groups, channels, topics, privacy and devices.
+CREATE TABLE IF NOT EXISTS user_settings (
+    user_id BIGINT UNSIGNED NOT NULL PRIMARY KEY,
+    profile_visibility ENUM('everyone','contacts','nobody') NOT NULL DEFAULT 'everyone',
+    show_birth_date TINYINT(1) NOT NULL DEFAULT 0,
+    show_local_group TINYINT(1) NOT NULL DEFAULT 0,
+    location_sharing TINYINT(1) NOT NULL DEFAULT 0,
+    language VARCHAR(12) NOT NULL DEFAULT 'ru',
+    currency CHAR(3) NOT NULL DEFAULT 'RUB',
+    theme ENUM('system','light','dark') NOT NULL DEFAULT 'system',
+    notifications_enabled TINYINT(1) NOT NULL DEFAULT 1,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    CONSTRAINT fk_settings_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS user_devices (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    user_id BIGINT UNSIGNED NOT NULL,
+    device_key_hash CHAR(64) NOT NULL,
+    device_name VARCHAR(120) NOT NULL DEFAULT 'Unknown device',
+    platform VARCHAR(40) NOT NULL DEFAULT 'unknown',
+    last_seen_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    revoked_at DATETIME NULL,
+    UNIQUE KEY uq_device_user_key (user_id, device_key_hash),
+    INDEX idx_devices_user (user_id, revoked_at),
+    CONSTRAINT fk_device_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS user_blocks (
+    user_id BIGINT UNSIGNED NOT NULL,
+    blocked_user_id BIGINT UNSIGNED NOT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (user_id, blocked_user_id),
+    CONSTRAINT fk_block_owner FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    CONSTRAINT fk_block_target FOREIGN KEY (blocked_user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS chat_groups (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    owner_id BIGINT UNSIGNED NOT NULL,
+    title VARCHAR(120) NOT NULL,
+    description VARCHAR(1000) NOT NULL DEFAULT '',
+    group_kind ENUM('group','local_area') NOT NULL DEFAULT 'group',
+    area_code VARCHAR(100) NULL,
+    is_private TINYINT(1) NOT NULL DEFAULT 1,
+    topics_enabled TINYINT(1) NOT NULL DEFAULT 0,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_groups_owner (owner_id),
+    INDEX idx_groups_area (group_kind, area_code),
+    CONSTRAINT fk_group_owner FOREIGN KEY (owner_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS group_members (
+    group_id BIGINT UNSIGNED NOT NULL,
+    user_id BIGINT UNSIGNED NOT NULL,
+    role ENUM('owner','admin','moderator','member') NOT NULL DEFAULT 'member',
+    joined_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    muted_until DATETIME NULL,
+    PRIMARY KEY (group_id, user_id),
+    INDEX idx_group_member_user (user_id),
+    CONSTRAINT fk_group_member_group FOREIGN KEY (group_id) REFERENCES chat_groups(id) ON DELETE CASCADE,
+    CONSTRAINT fk_group_member_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS channels (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    owner_id BIGINT UNSIGNED NOT NULL,
+    title VARCHAR(120) NOT NULL,
+    description VARCHAR(1000) NOT NULL DEFAULT '',
+    is_public TINYINT(1) NOT NULL DEFAULT 0,
+    invite_code CHAR(32) NOT NULL UNIQUE,
+    topics_enabled TINYINT(1) NOT NULL DEFAULT 0,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_channels_owner (owner_id),
+    CONSTRAINT fk_channel_owner FOREIGN KEY (owner_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS channel_members (
+    channel_id BIGINT UNSIGNED NOT NULL,
+    user_id BIGINT UNSIGNED NOT NULL,
+    role ENUM('owner','admin','subscriber') NOT NULL DEFAULT 'subscriber',
+    joined_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (channel_id, user_id),
+    INDEX idx_channel_member_user (user_id),
+    CONSTRAINT fk_channel_member_channel FOREIGN KEY (channel_id) REFERENCES channels(id) ON DELETE CASCADE,
+    CONSTRAINT fk_channel_member_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS topics (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    group_id BIGINT UNSIGNED NULL,
+    channel_id BIGINT UNSIGNED NULL,
+    creator_id BIGINT UNSIGNED NOT NULL,
+    title VARCHAR(120) NOT NULL,
+    description VARCHAR(500) NOT NULL DEFAULT '',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_topics_group (group_id),
+    INDEX idx_topics_channel (channel_id),
+    CONSTRAINT fk_topic_group FOREIGN KEY (group_id) REFERENCES chat_groups(id) ON DELETE CASCADE,
+    CONSTRAINT fk_topic_channel FOREIGN KEY (channel_id) REFERENCES channels(id) ON DELETE CASCADE,
+    CONSTRAINT fk_topic_creator FOREIGN KEY (creator_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS topic_messages (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    topic_id BIGINT UNSIGNED NOT NULL,
+    sender_id BIGINT UNSIGNED NOT NULL,
+    body TEXT NOT NULL,
+    body_encrypted TINYINT(1) NOT NULL DEFAULT 0,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    edited_at DATETIME NULL,
+    INDEX idx_topic_messages_page (topic_id, id),
+    CONSTRAINT fk_topic_message_topic FOREIGN KEY (topic_id) REFERENCES topics(id) ON DELETE CASCADE,
+    CONSTRAINT fk_topic_message_sender FOREIGN KEY (sender_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS message_attachments (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    message_id BIGINT UNSIGNED NOT NULL,
+    storage_key VARCHAR(255) NOT NULL,
+    original_name VARCHAR(255) NOT NULL,
+    mime_type VARCHAR(127) NOT NULL DEFAULT 'application/octet-stream',
+    byte_size BIGINT UNSIGNED NOT NULL,
+    sha256 CHAR(64) NOT NULL,
+    encryption_version VARCHAR(32) NOT NULL DEFAULT 'client-v1',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_attachment_message (message_id),
+    CONSTRAINT fk_attachment_message FOREIGN KEY (message_id) REFERENCES messages(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS message_receipts (
+    message_id BIGINT UNSIGNED NOT NULL,
+    user_id BIGINT UNSIGNED NOT NULL,
+    delivered_at DATETIME NULL,
+    read_at DATETIME NULL,
+    PRIMARY KEY (message_id, user_id),
+    INDEX idx_receipts_user (user_id, read_at),
+    CONSTRAINT fk_receipt_message FOREIGN KEY (message_id) REFERENCES messages(id) ON DELETE CASCADE,
+    CONSTRAINT fk_receipt_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS message_reactions (
+    message_id BIGINT UNSIGNED NOT NULL,
+    user_id BIGINT UNSIGNED NOT NULL,
+    reaction VARCHAR(32) NOT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (message_id, user_id, reaction),
+    CONSTRAINT fk_reaction_message FOREIGN KEY (message_id) REFERENCES messages(id) ON DELETE CASCADE,
+    CONSTRAINT fk_reaction_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS reports (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    reporter_id BIGINT UNSIGNED NOT NULL,
+    target_user_id BIGINT UNSIGNED NULL,
+    message_id BIGINT UNSIGNED NULL,
+    reason VARCHAR(80) NOT NULL,
+    details VARCHAR(2000) NOT NULL DEFAULT '',
+    status ENUM('open','reviewing','resolved','rejected') NOT NULL DEFAULT 'open',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_reports_status (status, created_at),
+    CONSTRAINT fk_report_reporter FOREIGN KEY (reporter_id) REFERENCES users(id) ON DELETE CASCADE,
+    CONSTRAINT fk_report_target FOREIGN KEY (target_user_id) REFERENCES users(id) ON DELETE SET NULL,
+    CONSTRAINT fk_report_message FOREIGN KEY (message_id) REFERENCES messages(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS admin_users (
+    user_id BIGINT UNSIGNED NOT NULL PRIMARY KEY,
+    role ENUM('support','moderator','admin','owner') NOT NULL DEFAULT 'support',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_admin_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS notifications (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    user_id BIGINT UNSIGNED NOT NULL,
+    kind VARCHAR(40) NOT NULL,
+    payload JSON NULL,
+    read_at DATETIME NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_notifications_user (user_id, read_at, id),
+    CONSTRAINT fk_notification_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
