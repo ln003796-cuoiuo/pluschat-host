@@ -197,7 +197,7 @@ CREATE TABLE IF NOT EXISTS message_attachments (
     mime_type VARCHAR(127) NOT NULL DEFAULT 'application/octet-stream',
     byte_size BIGINT UNSIGNED NOT NULL,
     sha256 CHAR(64) NOT NULL,
-    encryption_version VARCHAR(32) NOT NULL DEFAULT 'client-v1',
+    encryption_version VARCHAR(32) NOT NULL DEFAULT 'pc-e2ee-v1',
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     INDEX idx_attachment_message (message_id),
     CONSTRAINT fk_attachment_message FOREIGN KEY (message_id) REFERENCES messages(id) ON DELETE CASCADE
