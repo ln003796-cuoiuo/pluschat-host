@@ -92,7 +92,7 @@ function pc_groups_dispatch(string $path, string $method): bool
                 if ($method === 'GET') {
                     $limit = filter_var($_GET['limit'] ?? 50, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1, 'max_range' => 100]]) ?: 50;
                     $before = filter_var($_GET['before'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
-                    $sql = 'SELECT id, sender_id, body, body_encrypted, encryption_version, created_at, edited_at FROM group_messages WHERE group_id = ?';
+                    $sql = 'SELECT id, sender_id, body, body_encrypted, encryption_version, created_at, edited_at FROM group_messages WHERE group_id = ? AND body_encrypted = 1';
                     $params = [$groupId];
                     if ($before) { $sql .= ' AND id < ?'; $params[] = $before; }
                     $sql .= ' ORDER BY id DESC LIMIT ' . (int)$limit;
@@ -101,12 +101,10 @@ function pc_groups_dispatch(string $path, string $method): bool
                     pc_json(200, ['ok' => true, 'messages' => array_reverse($stmt->fetchAll())]);
                 }
                 $data = pc_input();
-                $body = pc_string($data, 'body');
-                $encrypted = filter_var($data['encrypted'] ?? false, FILTER_VALIDATE_BOOLEAN) ? 1 : 0;
-                $version = $encrypted ? (pc_string($data, 'encryption_version') ?: 'client-v1') : null;
-                if ($body === '' || pc_len($body) > 4000 || ($encrypted && strlen($body) > 12000)) pc_json(422, ['ok' => false, 'error' => 'invalid_message_body']);
-                pc_db()->prepare('INSERT INTO group_messages (group_id, sender_id, body, body_encrypted, encryption_version) VALUES (?, ?, ?, ?, ?)')->execute([$groupId, $user['id'], $body, $encrypted, $version]);
-                pc_json(201, ['ok' => true, 'message' => ['id' => (string)pc_db()->lastInsertId(), 'group_id' => (string)$groupId, 'sender_id' => (string)$user['id'], 'body' => $body, 'encrypted' => (bool)$encrypted, 'encryption_version' => $version, 'created_at' => gmdate('Y-m-d H:i:s')]]);
+                $envelope = pc_encrypted_envelope($data['body'] ?? null);
+                if (!$envelope) pc_json(422, ['ok' => false, 'error' => 'encrypted_message_envelope_required', 'format' => 'pc-e2ee-v1']);
+                pc_db()->prepare('INSERT INTO group_messages (group_id, sender_id, body, body_encrypted, encryption_version) VALUES (?, ?, ?, 1, ?)')->execute([$groupId, $user['id'], $envelope['body'], $envelope['version']]);
+                pc_json(201, ['ok' => true, 'message' => ['id' => (string)pc_db()->lastInsertId(), 'group_id' => (string)$groupId, 'sender_id' => (string)$user['id'], 'body' => $envelope['body'], 'encrypted' => true, 'encryption_version' => $envelope['version'], 'created_at' => gmdate('Y-m-d H:i:s')]]);
             }
     return false;
 }
