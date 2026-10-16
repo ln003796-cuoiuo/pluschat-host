@@ -100,6 +100,7 @@ function pc_groups_dispatch(string $path, string $method): bool
                     $stmt->execute($params);
                     pc_json(200, ['ok' => true, 'messages' => array_reverse($stmt->fetchAll())]);
                 }
+                pc_rate_limit('group-message-send', 90, 60);
                 $data = pc_input();
                 $envelope = pc_encrypted_envelope($data['body'] ?? null);
                 if (!$envelope) pc_json(422, ['ok' => false, 'error' => 'encrypted_message_envelope_required', 'format' => 'pc-e2ee-v1']);
