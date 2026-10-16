@@ -87,7 +87,7 @@ try {
     require_once dirname(__DIR__) . '/security/api/Controller.php';
     require_once dirname(__DIR__) . '/groups/api/Controller.php';
     require_once dirname(__DIR__) . '/channels/api/Controller.php';
-    require_once dirname(__DIR__) . '/api/integrations/calls/api/Controller.php';
+    require_once dirname(__DIR__) . '/calls/api/Controller.php';
     require_once dirname(__DIR__) . '/admin/api/Controller.php';
     require_once dirname(__DIR__) . '/files/api/Controller.php';
 
@@ -103,7 +103,7 @@ try {
     if (pc_security_dispatch($path, $method)) { exit; }
     if (pc_groups_dispatch($path, $method)) { exit; }
     if (pc_channels_dispatch($path, $method)) { exit; }
-    if (pc_calls_integration_dispatch($path, $method)) { exit; }
+    if (pc_calls_dispatch($path, $method)) { exit; }
     if (pc_admin_dispatch($path, $method)) { exit; }
     if (pc_files_dispatch($path, $method)) { exit; }
 
