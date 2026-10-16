@@ -48,6 +48,7 @@ foreach (['pc_friends_dispatch','pc_saved_dispatch','pc_polls_dispatch','pc_chat
     if (strpos($index, $route) === false) $errors[] = 'Router missing: ' . $route;
 }
 $registrationValidator = (string)file_get_contents($root . '/register/validators/RegistrationValidator.php');
+if (!str_contains($registrationValidator, 'invalid_phone')) $errors[] = 'Registration must validate phone number';
 if (!str_contains($registrationValidator, 'first_name_required')) $errors[] = 'Registration must require first name';
 $registrationRepository = (string)file_get_contents($root . '/register/repositories/RegistrationRepository.php');
 if (!str_contains($registrationRepository, 'confirmCode') || !str_contains($registrationRepository, 'INTERVAL 15 MINUTE')) $errors[] = 'Short-lived email verification code flow is missing';
