@@ -16,13 +16,9 @@ final class PCAttachmentValidator
         if ($size < 28) return ['status' => 422, 'error' => 'encrypted_attachment_too_small'];
         if ($size > 25 * 1024 * 1024) return ['status' => 413, 'error' => 'attachment_size_limit_25mb'];
 
-        $name = basename(str_replace("\\", '/', (string)($post['original_name'] ?? 'encrypted.bin')));
-        $name = preg_replace('/[\\x00-\\x1F\\x7F]/u', '', $name) ?: 'encrypted.bin';
-        if (pc_len($name) > 255) $name = substr($name, 0, 255);
-        $mime = pc_string($post, 'mime_type') ?: 'application/octet-stream';
-        if (pc_len($mime) > 127 || !preg_match('#^[a-zA-Z0-9.+-]+/[a-zA-Z0-9.+-]+$#', $mime)) {
-            $mime = 'application/octet-stream';
-        }
+        // Keep filename and MIME metadata private; the encrypted client manifest carries the real values.
+        $name = 'encrypted.bin';
+        $mime = 'application/octet-stream';
         return ['size' => $size, 'original_name' => $name, 'mime_type' => $mime, 'tmp_name' => (string)$file['tmp_name']];
     }
 }
