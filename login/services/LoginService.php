@@ -38,7 +38,7 @@ final class PCLoginService
         }
 
         // A restricted setup token is issued for first-time mandatory 2FA enrollment.
-        $issued = PCLoginRepository::issueToken($pdo, $user, $input);
+        $issued = PCLoginRepository::issueToken($pdo, $user, $input, 900);
         return [
             'status' => 200,
             'body' => [
