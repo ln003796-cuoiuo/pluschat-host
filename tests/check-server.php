@@ -94,6 +94,15 @@ foreach (['calls/api/Controller.php', 'calls/services/CallService.php', 'securit
     $source = (string)file_get_contents($root . '/' . $relative);
     if ($source === '') $errors[] = 'Empty security/calls module: ' . $relative;
 }
+
+$securitySource = (string)file_get_contents($root . '/security/api/Controller.php');
+if (str_contains($securitySource, 'Bearer\\\\s+')) {
+    $errors[] = 'Security API contains an over-escaped Bearer-token regex';
+}
+$entrySource = (string)file_get_contents($root . '/public/index.php');
+if (!str_contains($entrySource, "'schema' => 'ready'") || !str_contains($entrySource, "'schema' => 'incomplete'")) {
+    $errors[] = 'Health endpoint must distinguish a ready schema from an incomplete schema';
+}
 foreach (explode("\n", $schema) as $lineNumber => $line) {
     if (str_starts_with(trim($line), '--') && str_contains($line, ';')) {
         $errors[] = 'SQL installer may split a comment at line ' . ($lineNumber + 1);
