@@ -31,7 +31,8 @@ function pc_security_dispatch(string $path, string $method): bool
         if (!PCTwoFactorService::confirmSetup(pc_db(), (int)$user['id'], $setupId, $code)) {
             pc_json(400, ['ok' => false, 'error' => 'invalid_or_expired_two_factor_code', 'message' => 'Код неверный или истёк. Синхронизируй время на телефоне и попробуй снова.']);
         }
-        pc_json(200, ['ok' => true, 'enabled' => true, 'message' => 'Двухэтапная аутентификация включена.']);
+        $rotated = PCTwoFactorService::upgradeSetupToken(pc_db(), (int)$user['id'], $_SERVER['HTTP_AUTHORIZATION'] ?? '');
+        pc_json(200, ['ok' => true, 'enabled' => true, 'message' => 'Двухэтапная аутентификация включена.'] + $rotated);
     }
 
     if ($path === '/api/v1/auth/2fa/verify' && $method === 'POST') {
