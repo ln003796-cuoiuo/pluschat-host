@@ -808,7 +808,7 @@ try {
         }
         $size = (int)($file['size'] ?? 0);
         if ($size < 1 || $size > 25 * 1024 * 1024) pc_json(413, ['ok' => false, 'error' => 'attachment_size_limit_25mb']);
-        $originalName = basename(str_replace("\\\\", '/', (string)($_POST['original_name'] ?? 'encrypted.bin')));
+        $originalName = basename(str_replace("\\", '/', (string)($_POST['original_name'] ?? 'encrypted.bin')));
         $originalName = preg_replace('/[\\x00-\\x1F\\x7F]/u', '', $originalName) ?: 'encrypted.bin';
         if (pc_len($originalName) > 255) $originalName = substr($originalName, 0, 255);
         $mime = pc_string($_POST, 'mime_type') ?: 'application/octet-stream';
