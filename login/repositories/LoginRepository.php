@@ -14,7 +14,8 @@ final class PCLoginRepository
     public static function issueToken(PDO $pdo, array $user, array $input): array
     {
         $token = bin2hex(random_bytes(32));
-        $expiresAt = (new DateTimeImmutable('now', new DateTimeZone('UTC')))->modify('+30 days')->format('Y-m-d H:i:s');
+        $ttlSeconds = max(60, min(2592000, $ttlSeconds));
+        $expiresAt = (new DateTimeImmutable('now', new DateTimeZone('UTC')))->modify('+' . $ttlSeconds . ' seconds')->format('Y-m-d H:i:s');
         $deviceHash = null;
         if ($input['device_key'] !== '') {
             $deviceHash = hash('sha256', $input['device_key']);
