@@ -6,6 +6,9 @@ RewriteEngine On
 # Keep source, configuration and database files out of public access.
 RewriteRule ^(?:bootstrap\.php|config(?:\.example)?\.php|database(?:/|$)|storage(?:/|$)|\.git(?:/|$)) - [F,L,NC]
 
+# Expose the one-time installer at /setup.php while keeping it disabled after config.php exists.
+RewriteRule ^setup\.php$ public/setup.php [QSA,L]
+
 # Route API URLs to the single PHP entry point.
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteCond %{REQUEST_FILENAME} !-d
