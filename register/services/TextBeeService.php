@@ -9,7 +9,7 @@ final class PCTextBeeService
 {
     public static function send(string $phone, string $message): bool
     {
-        $apiKey = trim((string)pc_config('textbee_api_key', ''));
+        $apiKey = trim((string)(pc_config('textbee_api_key', '') ?: getenv('PLUSCHAT_TEXTBEE_API_KEY') ?: ''));
         if ($apiKey === '' || !preg_match('/^\\+[1-9][0-9]{7,14}$/', $phone)) {
             return false;
         }
