@@ -6,46 +6,15 @@ declare(strict_types=1);
  * Business logic remains in this feature module; shared HTTP/database helpers
  * are loaded by public/index.php through bootstrap.php.
  */
+require_once dirname(__DIR__) . '/services/ChatService.php';
+
 function pc_chats_dispatch(string $path, string $method): bool
 {
     if ($path === '/api/v1/conversations' && $method === 'POST') {
-            $user = pc_require_verified_user();
-            $data = pc_input();
-            $otherId = filter_var($data['user_id'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
-            if (!$otherId || (int)$otherId === (int)$user['id']) pc_json(422, ['ok' => false, 'error' => 'invalid_recipient']);
-            $pdo = pc_db();
-            $exists = $pdo->prepare('SELECT id FROM users WHERE id = ? AND email_verified_at IS NOT NULL');
-            $exists->execute([$otherId]);
-            if (!$exists->fetch()) pc_json(404, ['ok' => false, 'error' => 'user_not_found']);
-            $blocked = $pdo->prepare('SELECT 1 FROM user_blocks WHERE (user_id = ? AND blocked_user_id = ?) OR (user_id = ? AND blocked_user_id = ?) LIMIT 1');
-            $blocked->execute([$user['id'], $otherId, $otherId, $user['id']]);
-            if ($blocked->fetchColumn()) pc_json(403, ['ok' => false, 'error' => 'messaging_blocked']);
-    
-            $find = $pdo->prepare(
-                'SELECT c.id FROM conversations c
-                 JOIN conversation_members m1 ON m1.conversation_id = c.id AND m1.user_id = ?
-                 JOIN conversation_members m2 ON m2.conversation_id = c.id AND m2.user_id = ?
-                 WHERE (SELECT COUNT(*) FROM conversation_members mc WHERE mc.conversation_id = c.id) = 2
-                 ORDER BY c.id LIMIT 1'
-            );
-            $find->execute([$user['id'], $otherId]);
-            $conversation = $find->fetch();
-            if ($conversation) pc_json(200, ['ok' => true, 'conversation_id' => (string)$conversation['id'], 'created' => false]);
-    
-            $pdo->beginTransaction();
-            try {
-                $pdo->exec('INSERT INTO conversations () VALUES ()');
-                $conversationId = (int)$pdo->lastInsertId();
-                $member = $pdo->prepare('INSERT INTO conversation_members (conversation_id, user_id) VALUES (?, ?)');
-                $member->execute([$conversationId, $user['id']]);
-                $member->execute([$conversationId, $otherId]);
-                $pdo->commit();
-            } catch (Throwable $e) {
-                if ($pdo->inTransaction()) $pdo->rollBack();
-                throw $e;
-            }
-            pc_json(201, ['ok' => true, 'conversation_id' => (string)$conversationId, 'created' => true]);
-        }
+        $user = pc_require_verified_user();
+        $result = PCChatService::createDirect((int)$user['id'], pc_input());
+        pc_json($result['status'], $result['body']);
+    }
 
     if ($path === '/api/v1/conversations' && $method === 'GET') {
             $user = pc_require_verified_user();
