@@ -53,6 +53,8 @@ CREATE TABLE IF NOT EXISTS messages (
     conversation_id BIGINT UNSIGNED NOT NULL,
     sender_id BIGINT UNSIGNED NOT NULL,
     body TEXT NOT NULL,
+    body_encrypted TINYINT(1) NOT NULL DEFAULT 0,
+    encryption_version VARCHAR(32) NULL,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     edited_at DATETIME NULL,
     CONSTRAINT fk_message_conversation FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE,
