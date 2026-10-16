@@ -48,9 +48,20 @@ function pc_json(int $status, array $data): never {
 }
 
 function pc_input(): array {
-    $raw = file_get_contents('php://input');
-    $data = json_decode($raw ?: '{}', true);
-    return is_array($data) ? $data : [];
+    $maxBytes = 1024 * 1024;
+    $raw = file_get_contents('php://input', false, null, 0, $maxBytes + 1);
+    if ($raw === false) {
+        pc_json(400, ['ok' => false, 'error' => 'request_body_unreadable']);
+    }
+    if (strlen($raw) > $maxBytes) {
+        pc_json(413, ['ok' => false, 'error' => 'request_body_too_large', 'max_bytes' => $maxBytes]);
+    }
+    if (trim($raw) === '') return [];
+    $data = json_decode($raw, true);
+    if (json_last_error() !== JSON_ERROR_NONE || !is_array($data)) {
+        pc_json(400, ['ok' => false, 'error' => 'invalid_json']);
+    }
+    return $data;
 }
 
 function pc_require_method(string $method): void {
