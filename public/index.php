@@ -521,6 +521,45 @@ try {
         pc_json(200, ['ok' => true, 'settings' => $stmt->fetch()]);
     }
 
+
+    if (preg_match('#^/api/v1/groups/([0-9]+)/messages$#', $path, $matches) && ($method === 'GET' || $method === 'POST')) {
+        $user = pc_require_verified_user();
+        $groupId = (int)$matches[1];
+        $member = pc_db()->prepare('SELECT role FROM group_members WHERE group_id = ? AND user_id = ?');
+        $member->execute([$groupId, $user['id']]);
+        if (!$member->fetch()) pc_json(404, ['ok' => false, 'error' => 'group_not_found']);
+        if ($method === 'GET') {
+            $limit = filter_var($_GET['limit'] ?? 50, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1, 'max_range' => 100]]) ?: 50;
+            $before = filter_var($_GET['before'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
+            $sql = 'SELECT id, sender_id, body, body_encrypted, encryption_version, created_at, edited_at FROM group_messages WHERE group_id = ?';
+            $params = [$groupId];
+            if ($before) { $sql .= ' AND id < ?'; $params[] = $before; }
+            $sql .= ' ORDER BY id DESC LIMIT ' . (int)$limit;
+            $stmt = pc_db()->prepare($sql);
+            $stmt->execute($params);
+            pc_json(200, ['ok' => true, 'messages' => array_reverse($stmt->fetchAll())]);
+        }
+        $data = pc_input();
+        $body = pc_string($data, 'body');
+        $encrypted = filter_var($data['encrypted'] ?? false, FILTER_VALIDATE_BOOLEAN) ? 1 : 0;
+        $version = $encrypted ? (pc_string($data, 'encryption_version') ?: 'client-v1') : null;
+        if ($body === '' || pc_len($body) > 4000 || ($encrypted && strlen($body) > 12000)) pc_json(422, ['ok' => false, 'error' => 'invalid_message_body']);
+        pc_db()->prepare('INSERT INTO group_messages (group_id, sender_id, body, body_encrypted, encryption_version) VALUES (?, ?, ?, ?, ?)')->execute([$groupId, $user['id'], $body, $encrypted, $version]);
+        pc_json(201, ['ok' => true, 'message' => ['id' => (string)pc_db()->lastInsertId(), 'group_id' => (string)$groupId, 'sender_id' => (string)$user['id'], 'body' => $body, 'encrypted' => (bool)$encrypted, 'encryption_version' => $version, 'created_at' => gmdate('Y-m-d H:i:s')]]);
+    }
+
+    if (preg_match('#^/api/v1/groups/([0-9]+)/leave$#', $path, $matches) && $method === 'POST') {
+        $user = pc_require_verified_user();
+        $groupId = (int)$matches[1];
+        $stmt = pc_db()->prepare('SELECT role FROM group_members WHERE group_id = ? AND user_id = ?');
+        $stmt->execute([$groupId, $user['id']]);
+        $role = $stmt->fetchColumn();
+        if ($role === false) pc_json(404, ['ok' => false, 'error' => 'group_not_found']);
+        if ($role === 'owner') pc_json(409, ['ok' => false, 'error' => 'owner_must_transfer_or_delete_group']);
+        pc_db()->prepare('DELETE FROM group_members WHERE group_id = ? AND user_id = ?')->execute([$groupId, $user['id']]);
+        pc_json(200, ['ok' => true, 'left' => true]);
+    }
+
     if ($path === '/api/v1/groups/discover' && $method === 'GET') {
         $user = pc_require_verified_user();
         $query = trim((string)($_GET['q'] ?? ''));
@@ -625,6 +664,35 @@ try {
         $stmt = $pdo->prepare('SELECT c.id, c.title, c.description, c.is_public, c.topics_enabled, c.created_at, cm.role FROM channel_members cm JOIN channels c ON c.id = cm.channel_id WHERE cm.user_id = ? ORDER BY c.updated_at DESC LIMIT 100');
         $stmt->execute([$user['id']]);
         pc_json(200, ['ok' => true, 'channels' => $stmt->fetchAll()]);
+    }
+
+
+    if (preg_match('#^/api/v1/channels/([0-9]+)/posts$#', $path, $matches) && ($method === 'GET' || $method === 'POST')) {
+        $user = pc_require_verified_user();
+        $channelId = (int)$matches[1];
+        $member = pc_db()->prepare('SELECT role FROM channel_members WHERE channel_id = ? AND user_id = ?');
+        $member->execute([$channelId, $user['id']]);
+        $role = $member->fetchColumn();
+        if ($role === false) pc_json(404, ['ok' => false, 'error' => 'channel_not_found']);
+        if ($method === 'GET') {
+            $limit = filter_var($_GET['limit'] ?? 50, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1, 'max_range' => 100]]) ?: 50;
+            $before = filter_var($_GET['before'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
+            $sql = 'SELECT id, sender_id, body, body_encrypted, encryption_version, created_at, edited_at FROM channel_posts WHERE channel_id = ?';
+            $params = [$channelId];
+            if ($before) { $sql .= ' AND id < ?'; $params[] = $before; }
+            $sql .= ' ORDER BY id DESC LIMIT ' . (int)$limit;
+            $stmt = pc_db()->prepare($sql);
+            $stmt->execute($params);
+            pc_json(200, ['ok' => true, 'posts' => array_reverse($stmt->fetchAll())]);
+        }
+        if (!in_array($role, ['owner', 'admin'], true)) pc_json(403, ['ok' => false, 'error' => 'channel_posting_restricted']);
+        $data = pc_input();
+        $body = pc_string($data, 'body');
+        $encrypted = filter_var($data['encrypted'] ?? false, FILTER_VALIDATE_BOOLEAN) ? 1 : 0;
+        $version = $encrypted ? (pc_string($data, 'encryption_version') ?: 'client-v1') : null;
+        if ($body === '' || pc_len($body) > 4000 || ($encrypted && strlen($body) > 12000)) pc_json(422, ['ok' => false, 'error' => 'invalid_post_body']);
+        pc_db()->prepare('INSERT INTO channel_posts (channel_id, sender_id, body, body_encrypted, encryption_version) VALUES (?, ?, ?, ?, ?)')->execute([$channelId, $user['id'], $body, $encrypted, $version]);
+        pc_json(201, ['ok' => true, 'post' => ['id' => (string)pc_db()->lastInsertId(), 'channel_id' => (string)$channelId, 'sender_id' => (string)$user['id'], 'body' => $body, 'encrypted' => (bool)$encrypted, 'encryption_version' => $version, 'created_at' => gmdate('Y-m-d H:i:s')]]);
     }
 
     if ($path === '/api/v1/channels/discover' && $method === 'GET') {
