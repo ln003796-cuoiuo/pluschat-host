@@ -111,13 +111,14 @@ function pc_encrypted_envelope(mixed $body): ?array {
     ];
 }
 
-function pc_token_user(): array {
+function pc_token_user(bool $allowTwoFactorSetup = false): array {
     $header = $_SERVER['HTTP_AUTHORIZATION'] ?? '';
-    if (!preg_match('/^Bearer\s+([a-f0-9]{64})$/i', $header, $matches)) {
+    if (!preg_match('/^Bearer\\s+([a-f0-9]{64})$/i', $header, $matches)) {
         pc_json(401, ['ok' => false, 'error' => 'authentication_required']);
     }
     $stmt = pc_db()->prepare(
-        'SELECT u.id, u.email, u.username, u.first_name, u.last_name
+        'SELECT u.id, u.email, u.username, u.first_name, u.last_name,
+                EXISTS (SELECT 1 FROM user_two_factor f WHERE f.user_id = u.id AND f.enabled_at IS NOT NULL) AS two_factor_enabled
          FROM auth_tokens t JOIN users u ON u.id = t.user_id
          WHERE t.token_hash = ? AND t.expires_at > UTC_TIMESTAMP() AND u.email_verified_at IS NOT NULL'
     );
@@ -125,6 +126,9 @@ function pc_token_user(): array {
     $user = $stmt->fetch();
     if (!$user) {
         pc_json(401, ['ok' => false, 'error' => 'invalid_or_expired_token']);
+    }
+    if (!$allowTwoFactorSetup && empty($user['two_factor_enabled'])) {
+        pc_json(403, ['ok' => false, 'error' => 'two_factor_setup_required', 'message' => 'Настройте обязательную двухэтапную аутентификацию перед использованием Pluschat.']);
     }
     return $user;
 }
