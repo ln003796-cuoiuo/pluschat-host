@@ -279,8 +279,18 @@ try {
             pc_json(422, ['ok' => false, 'error' => 'query_must_be_2_to_64_characters']);
         }
         $like = '%' . addcslashes($query, '%_\\') . '%';
-        $stmt = pc_db()->prepare('SELECT id, username, first_name, last_name FROM users WHERE id <> ? AND (username LIKE ? OR first_name LIKE ? OR last_name LIKE ?) ORDER BY username LIMIT 30');
-        $stmt->execute([$user['id'], $like, $like, $like]);
+        $stmt = pc_db()->prepare("SELECT u.id, u.username, u.first_name, u.last_name
+            FROM users u LEFT JOIN user_settings s ON s.user_id = u.id
+            WHERE u.id <> ? AND (u.username LIKE ? OR u.first_name LIKE ? OR u.last_name LIKE ?)
+              AND COALESCE(s.profile_visibility, 'everyone') <> 'nobody'
+              AND (COALESCE(s.profile_visibility, 'everyone') <> 'contacts' OR EXISTS (
+                  SELECT 1 FROM conversation_members mine
+                  JOIN conversation_members theirs ON theirs.conversation_id = mine.conversation_id
+                  WHERE mine.user_id = ? AND theirs.user_id = u.id
+              ))
+              AND NOT EXISTS (SELECT 1 FROM user_blocks b WHERE (b.user_id = ? AND b.blocked_user_id = u.id) OR (b.user_id = u.id AND b.blocked_user_id = ?))
+            ORDER BY u.username LIMIT 30");
+        $stmt->execute([$user['id'], $like, $like, $like, $user['id'], $user['id'], $user['id']]);
         pc_json(200, ['ok' => true, 'users' => array_map(static fn(array $u): array => [
             'id' => (string)$u['id'], 'username' => $u['username'],
             'first_name' => $u['first_name'], 'last_name' => $u['last_name'],
@@ -296,6 +306,9 @@ try {
         $exists = $pdo->prepare('SELECT id FROM users WHERE id = ? AND email_verified_at IS NOT NULL');
         $exists->execute([$otherId]);
         if (!$exists->fetch()) pc_json(404, ['ok' => false, 'error' => 'user_not_found']);
+        $blocked = $pdo->prepare('SELECT 1 FROM user_blocks WHERE (user_id = ? AND blocked_user_id = ?) OR (user_id = ? AND blocked_user_id = ?) LIMIT 1');
+        $blocked->execute([$user['id'], $otherId, $otherId, $user['id']]);
+        if ($blocked->fetchColumn()) pc_json(403, ['ok' => false, 'error' => 'messaging_blocked']);
 
         $find = $pdo->prepare(
             'SELECT c.id FROM conversations c
@@ -433,6 +446,36 @@ try {
         $stmt = pc_db()->prepare('DELETE FROM auth_tokens WHERE user_id = ? AND token_hash <> ?');
         $stmt->execute([$user['id'], $currentHash]);
         pc_json(200, ['ok' => true, 'revoked_sessions' => $stmt->rowCount()]);
+    }
+
+
+    if ($path === '/api/v1/birthdays' && $method === 'GET') {
+        $user = pc_require_verified_user();
+        $sql = "SELECT u.id, u.username, u.first_name, u.last_name,
+            CASE WHEN DATE_FORMAT(u.birth_date, '%m-%d') >= DATE_FORMAT(UTC_DATE(), '%m-%d')
+                 THEN STR_TO_DATE(CONCAT(YEAR(UTC_DATE()), '-', DATE_FORMAT(u.birth_date, '%m-%d')), '%Y-%m-%d')
+                 ELSE STR_TO_DATE(CONCAT(YEAR(UTC_DATE()) + 1, '-', DATE_FORMAT(u.birth_date, '%m-%d')), '%Y-%m-%d')
+            END AS next_birthday,
+            DATEDIFF(
+                CASE WHEN DATE_FORMAT(u.birth_date, '%m-%d') >= DATE_FORMAT(UTC_DATE(), '%m-%d')
+                     THEN STR_TO_DATE(CONCAT(YEAR(UTC_DATE()), '-', DATE_FORMAT(u.birth_date, '%m-%d')), '%Y-%m-%d')
+                     ELSE STR_TO_DATE(CONCAT(YEAR(UTC_DATE()) + 1, '-', DATE_FORMAT(u.birth_date, '%m-%d')), '%Y-%m-%d')
+                END, UTC_DATE()
+            ) AS days_until
+            FROM users u JOIN user_settings s ON s.user_id = u.id
+            WHERE u.id <> ? AND u.email_verified_at IS NOT NULL AND u.birth_date IS NOT NULL
+              AND s.show_birth_date = 1 AND s.profile_visibility <> 'nobody'
+              AND (s.profile_visibility = 'everyone' OR EXISTS (
+                  SELECT 1 FROM conversation_members mine
+                  JOIN conversation_members theirs ON theirs.conversation_id = mine.conversation_id
+                  WHERE mine.user_id = ? AND theirs.user_id = u.id
+              ))
+              AND NOT EXISTS (SELECT 1 FROM user_blocks b WHERE (b.user_id = ? AND b.blocked_user_id = u.id) OR (b.user_id = u.id AND b.blocked_user_id = ?))
+            HAVING days_until BETWEEN 0 AND 30
+            ORDER BY days_until, u.username LIMIT 100";
+        $stmt = pc_db()->prepare($sql);
+        $stmt->execute([$user['id'], $user['id'], $user['id'], $user['id']]);
+        pc_json(200, ['ok' => true, 'birthdays' => $stmt->fetchAll()]);
     }
 
     if ($path === '/api/v1/settings' && ($method === 'GET' || $method === 'POST')) {
