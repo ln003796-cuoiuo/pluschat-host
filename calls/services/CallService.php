@@ -15,6 +15,9 @@ final class PCCallService
         }
 
         $pdo = pc_db();
+        $pdo->exec("DELETE FROM call_signals WHERE expires_at <= UTC_TIMESTAMP() LIMIT 500");
+        $pdo->exec("UPDATE calls SET status = 'missed', ended_at = UTC_TIMESTAMP() WHERE status = 'ringing' AND expires_at <= UTC_TIMESTAMP()");
+        $pdo->exec("UPDATE calls SET status = 'ended', ended_at = UTC_TIMESTAMP() WHERE status = 'accepted' AND expires_at <= UTC_TIMESTAMP()");
         if (PCCallRepository::blocked($pdo, $userId, (int)$peerId)) {
             return ['status' => 403, 'body' => ['ok' => false, 'error' => 'calls_not_allowed']];
         }
@@ -45,6 +48,7 @@ final class PCCallService
         $signal = PCCallValidator::signal($data['signal'] ?? null);
         if (!$signal) return ['status' => 422, 'body' => ['ok' => false, 'error' => 'invalid_signal']];
         $pdo = pc_db();
+        $pdo->exec("DELETE FROM call_signals WHERE expires_at <= UTC_TIMESTAMP() LIMIT 500");
         $call = PCCallRepository::visibleCall($pdo, $callId, $userId);
         if (!$call) return ['status' => 404, 'body' => ['ok' => false, 'error' => 'call_not_found']];
         if (in_array($call['status'], ['declined','missed','ended','failed'], true) || ($call['status'] === 'ringing' && strtotime((string)$call['expires_at'] . ' UTC') <= time())) {
@@ -89,6 +93,7 @@ final class PCCallService
     public static function poll(int $userId, int $callId, mixed $after): array
     {
         $pdo = pc_db();
+        $pdo->exec("DELETE FROM call_signals WHERE expires_at <= UTC_TIMESTAMP() LIMIT 500");
         $call = PCCallRepository::visibleCall($pdo, $callId, $userId);
         if (!$call) return ['status' => 404, 'body' => ['ok' => false, 'error' => 'call_not_found']];
         $afterId = filter_var($after ?? 0, FILTER_VALIDATE_INT, ['options' => ['min_range' => 0]]);
