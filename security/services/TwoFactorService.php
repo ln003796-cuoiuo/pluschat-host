@@ -93,6 +93,37 @@ final class PCTwoFactorService
         ];
     }
 
+    public static function upgradeSetupToken(PDO $pdo, int $userId, string $authorization): array
+    {
+        if (!preg_match('/^Bearer\\s+([a-f0-9]{64})$/i', $authorization, $matches)) {
+            throw new RuntimeException('Invalid setup token');
+        }
+        $oldHash = hash('sha256', $matches[1]);
+        $stmt = $pdo->prepare('SELECT device_key_hash FROM auth_tokens WHERE token_hash = ? AND user_id = ? AND expires_at > UTC_TIMESTAMP() LIMIT 1');
+        $stmt->execute([$oldHash, $userId]);
+        $deviceHash = $stmt->fetchColumn();
+        if (!is_string($deviceHash) || !preg_match('/^[a-f0-9]{64}$/', $deviceHash)) {
+            throw new RuntimeException('Setup token device binding is missing');
+        }
+        $token = bin2hex(random_bytes(32));
+        $expiresAt = gmdate('Y-m-d H:i:s', time() + 30 * 86400);
+        $pdo->beginTransaction();
+        try {
+            $pdo->prepare('INSERT INTO auth_tokens (user_id, token_hash, device_key_hash, expires_at) VALUES (?, ?, ?, ?)')
+                ->execute([$userId, hash('sha256', $token), $deviceHash, $expiresAt]);
+            $pdo->prepare('DELETE FROM auth_tokens WHERE user_id = ? AND token_hash = ?')->execute([$userId, $oldHash]);
+            $pdo->commit();
+        } catch (Throwable $e) {
+            if ($pdo->inTransaction()) $pdo->rollBack();
+            throw $e;
+        }
+        $userStmt = $pdo->prepare('SELECT id, email, username, first_name, last_name, birth_date, email_verified_at, created_at FROM users WHERE id = ? LIMIT 1');
+        $userStmt->execute([$userId]);
+        $user = $userStmt->fetch();
+        if (!$user) throw new RuntimeException('User not found after enabling 2FA');
+        return ['token' => $token, 'token_type' => 'Bearer', 'expires_at' => $expiresAt, 'user' => pc_public_user($user)];
+    }
+
     private static function verifyCode(string $secret, string $code, int $timestamp): bool
     {
         if (!preg_match('/^[0-9]{6}$/', $code)) return false;
