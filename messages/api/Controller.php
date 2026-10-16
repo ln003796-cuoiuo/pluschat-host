@@ -78,8 +78,8 @@ function pc_messages_dispatch(string $path, string $method): bool
         $envelope = pc_encrypted_envelope($data['body'] ?? null);
         if (!$envelope) pc_json(422, ['ok' => false, 'error' => 'encrypted_message_envelope_required', 'format' => 'pc-e2ee-v1']);
         $messageId = (int)$matches[1];
-        $stmt = pc_db()->prepare('SELECT sender_id, created_at FROM messages WHERE id = ? AND body_encrypted = 1 LIMIT 1');
-        $stmt->execute([$messageId]);
+        $stmt = pc_db()->prepare('SELECT m.sender_id, m.created_at FROM messages m JOIN conversation_members cm ON cm.conversation_id = m.conversation_id AND cm.user_id = ? WHERE m.id = ? AND m.body_encrypted = 1 LIMIT 1');
+        $stmt->execute([$user['id'], $messageId]);
         $message = $stmt->fetch();
         if (!$message) pc_json(404, ['ok' => false, 'error' => 'message_not_found']);
         if ((int)$message['sender_id'] !== (int)$user['id']) pc_json(403, ['ok' => false, 'error' => 'message_edit_forbidden']);
