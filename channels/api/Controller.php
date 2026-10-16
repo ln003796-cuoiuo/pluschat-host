@@ -90,6 +90,7 @@ function pc_channels_dispatch(string $path, string $method): bool
                     pc_json(200, ['ok' => true, 'posts' => array_reverse($stmt->fetchAll())]);
                 }
                 if (!in_array($role, ['owner', 'admin'], true)) pc_json(403, ['ok' => false, 'error' => 'channel_posting_restricted']);
+                pc_rate_limit('channel-post-send', 60, 60);
                 $data = pc_input();
                 $envelope = pc_encrypted_envelope($data['body'] ?? null);
                 if (!$envelope) pc_json(422, ['ok' => false, 'error' => 'encrypted_message_envelope_required', 'format' => 'pc-e2ee-v1']);
