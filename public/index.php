@@ -94,7 +94,6 @@ try {
     require_once dirname(__DIR__) . '/chats/api/Controller.php';
     require_once dirname(__DIR__) . '/messages/api/Controller.php';
     require_once dirname(__DIR__) . '/topics/api/Controller.php';
-    require_once dirname(__DIR__) . '/api/api/Controller.php';
     require_once dirname(__DIR__) . '/security/api/Controller.php';
     require_once dirname(__DIR__) . '/groups/api/Controller.php';
     require_once dirname(__DIR__) . '/channels/api/Controller.php';
@@ -106,7 +105,6 @@ try {
     if (pc_chats_dispatch($path, $method)) { exit; }
     if (pc_messages_dispatch($path, $method)) { exit; }
     if (pc_topics_dispatch($path, $method)) { exit; }
-    if (pc_misc_api_dispatch($path, $method)) { exit; }
     if (pc_security_dispatch($path, $method)) { exit; }
     if (pc_groups_dispatch($path, $method)) { exit; }
     if (pc_channels_dispatch($path, $method)) { exit; }
