@@ -36,6 +36,12 @@ function pc_security_dispatch(string $path, string $method): bool
         if ($identity === false || strlen($identity) !== 32 || $prekey === false || strlen($prekey) !== 32 || $signature === false || strlen($signature) !== 64) {
             pc_json(422, ['ok' => false, 'error' => 'invalid_public_key_material']);
         }
+        if (!function_exists('sodium_crypto_sign_verify_detached')) {
+            pc_json(503, ['ok' => false, 'error' => 'server_crypto_extension_unavailable']);
+        }
+        if (!sodium_crypto_sign_verify_detached($signature, $prekey, $identity)) {
+            pc_json(422, ['ok' => false, 'error' => 'invalid_signed_prekey_signature']);
+        }
         $stmt = pc_db()->prepare(
             'INSERT INTO user_crypto_keys (user_id, device_key_hash, identity_public_key, signed_prekey, signed_prekey_signature, key_version)
              VALUES (?, ?, ?, ?, ?, \'pc-e2ee-v1\')
