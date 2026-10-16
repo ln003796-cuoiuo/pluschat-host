@@ -5,7 +5,8 @@ final class PCReactionValidator
 {
     public static function validate(string $reaction): bool
     {
-        if ($reaction === '' || preg_match('/[\x00-\x1F\x7F]/u', $reaction)) return false;
+        if ($reaction === '' || preg_match('//u', $reaction) !== 1) return false;
+        if (preg_match('/[\x00-\x1F\x7F]/u', $reaction) === 1) return false;
         return pc_len($reaction) <= 32;
     }
 }
