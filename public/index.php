@@ -25,6 +25,12 @@ $path = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/';
 $path = rtrim($path, '/') ?: '/';
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 
+function pc_len(string $value): int {
+    if (function_exists('mb_strlen')) return mb_strlen($value, 'UTF-8');
+    $count = preg_match_all('/./us', $value);
+    return $count === false ? strlen($value) : $count;
+}
+
 function pc_string(array $data, string $key): string {
     $value = $data[$key] ?? '';
     return is_string($value) ? trim($value) : '';
@@ -84,14 +90,14 @@ try {
 
     if ($path === '/api/v1/auth/register' && $method === 'POST') {
         $data = pc_input();
-        $email = mb_strtolower(pc_string($data, 'email'));
+        $email = strtolower(pc_string($data, 'email'));
         $username = pc_string($data, 'username');
         $password = is_string($data['password'] ?? null) ? $data['password'] : '';
         $firstName = pc_string($data, 'first_name');
         $lastName = pc_string($data, 'last_name');
         $birthDate = pc_string($data, 'birth_date');
 
-        if (!filter_var($email, FILTER_VALIDATE_EMAIL) || mb_strlen($email) > 254) {
+        if (!filter_var($email, FILTER_VALIDATE_EMAIL) || pc_len($email) > 254) {
             pc_json(422, ['ok' => false, 'error' => 'invalid_email']);
         }
         if (!preg_match('/^[A-Za-z0-9_]{3,32}$/', $username)) {
@@ -100,7 +106,7 @@ try {
         if (strlen($password) < 10 || strlen($password) > 200) {
             pc_json(422, ['ok' => false, 'error' => 'invalid_password', 'message' => 'Пароль должен содержать от 10 до 200 символов.']);
         }
-        if (mb_strlen($firstName) > 80 || mb_strlen($lastName) > 80) {
+        if (pc_len($firstName) > 80 || pc_len($lastName) > 80) {
             pc_json(422, ['ok' => false, 'error' => 'profile_field_too_long']);
         }
         if ($birthDate !== '' && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $birthDate)) {
@@ -164,7 +170,7 @@ try {
     }
 
     if ($path === '/api/v1/auth/resend-verification' && $method === 'POST') {
-        $email = mb_strtolower(pc_string(pc_input(), 'email'));
+        $email = strtolower(pc_string(pc_input(), 'email'));
         if (!filter_var($email, FILTER_VALIDATE_EMAIL)) pc_json(422, ['ok' => false, 'error' => 'invalid_email']);
         $pdo = pc_db();
         $stmt = $pdo->prepare('SELECT id, email, username, email_verified_at FROM users WHERE email = ? LIMIT 1');
@@ -182,8 +188,8 @@ try {
 
     if ($path === '/api/v1/auth/login' && $method === 'POST') {
         $data = pc_input();
-        $login = mb_strtolower(pc_string($data, 'login'));
-        if ($login === '') $login = mb_strtolower(pc_string($data, 'email'));
+        $login = strtolower(pc_string($data, 'login'));
+        if ($login === '') $login = strtolower(pc_string($data, 'email'));
         $password = is_string($data['password'] ?? null) ? $data['password'] : '';
         $stmt = pc_db()->prepare('SELECT id, email, username, password_hash, first_name, last_name, birth_date, email_verified_at, created_at FROM users WHERE email = ? OR username = ? LIMIT 1');
         $stmt->execute([$login, $login]);
@@ -220,7 +226,7 @@ try {
     if ($path === '/api/v1/users/search' && $method === 'GET') {
         $user = pc_require_verified_user();
         $query = trim((string)($_GET['q'] ?? ''));
-        if (mb_strlen($query) < 2 || mb_strlen($query) > 64) {
+        if (pc_len($query) < 2 || pc_len($query) > 64) {
             pc_json(422, ['ok' => false, 'error' => 'query_must_be_2_to_64_characters']);
         }
         $like = '%' . addcslashes($query, '%_\\') . '%';
@@ -317,7 +323,7 @@ try {
 
         if ($method === 'POST') {
             $body = pc_string(pc_input(), 'body');
-            if ($body === '' || mb_strlen($body) > 4000) pc_json(422, ['ok' => false, 'error' => 'message_must_be_1_to_4000_characters']);
+            if ($body === '' || pc_len($body) > 4000) pc_json(422, ['ok' => false, 'error' => 'message_must_be_1_to_4000_characters']);
             $stmt = pc_db()->prepare('INSERT INTO messages (conversation_id, sender_id, body) VALUES (?, ?, ?)');
             $stmt->execute([$conversationId, $user['id'], $body]);
             pc_json(201, ['ok' => true, 'message' => [
