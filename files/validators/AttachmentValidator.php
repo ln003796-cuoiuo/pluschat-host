@@ -5,15 +5,15 @@ final class PCAttachmentValidator
 {
     public static function validateUpload(array $post, array $files): array
     {
-        if (($post['encrypted'] ?? '') !== '1' || !isset($files['file']) || !is_array($files['file'])) {
-            return ['status' => 422, 'error' => 'encrypted_file_required', 'message' => 'Upload client-encrypted file bytes with encrypted=1.'];
+        if (($post['encrypted'] ?? '') !== '1' || ($post['encryption_version'] ?? '') !== 'pc-e2ee-v1' || !isset($files['file']) || !is_array($files['file'])) {
+            return ['status' => 422, 'error' => 'encrypted_file_required', 'message' => 'Upload client-encrypted file bytes with encrypted=1 and encryption_version=pc-e2ee-v1.'];
         }
         $file = $files['file'];
         if (($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK || !is_uploaded_file((string)($file['tmp_name'] ?? ''))) {
             return ['status' => 422, 'error' => 'upload_failed'];
         }
         $size = (int)($file['size'] ?? 0);
-        if ($size < 1) return ['status' => 422, 'error' => 'empty_attachment'];
+        if ($size < 28) return ['status' => 422, 'error' => 'encrypted_attachment_too_small'];
         if ($size > 25 * 1024 * 1024) return ['status' => 413, 'error' => 'attachment_size_limit_25mb'];
 
         $name = basename(str_replace("\\", '/', (string)($post['original_name'] ?? 'encrypted.bin')));
