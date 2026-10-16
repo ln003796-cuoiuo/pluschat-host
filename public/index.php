@@ -129,6 +129,7 @@ try {
     require_once dirname(__DIR__) . '/saved/api/Controller.php';
     require_once dirname(__DIR__) . '/polls/api/Controller.php';
     require_once dirname(__DIR__) . '/chatprefs/api/Controller.php';
+    require_once dirname(__DIR__) . '/stories/api/Controller.php';
 
     if (pc_register_dispatch($path, $method)) { exit; }
     if (pc_login_dispatch($path, $method)) { exit; }
@@ -149,6 +150,7 @@ try {
     if (pc_saved_dispatch($path, $method)) { exit; }
     if (pc_polls_dispatch($path, $method)) { exit; }
     if (pc_chatprefs_dispatch($path, $method)) { exit; }
+    if (pc_stories_dispatch($path, $method)) { exit; }
 
     pc_json(404, ['ok' => false, 'error' => 'endpoint_not_found', 'path' => $path]);
 } catch (PDOException $e) {
