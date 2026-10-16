@@ -12,6 +12,7 @@ function pc_calls_dispatch(string $path, string $method): bool
     }
 
     if ($path === '/api/v1/calls' && $method === 'POST') {
+        pc_rate_limit('call-create', 20, 3600);
         $user = pc_require_verified_user();
         $result = PCCallService::create((int)$user['id'], pc_input());
         pc_json($result['status'], $result['body']);
@@ -24,6 +25,7 @@ function pc_calls_dispatch(string $path, string $method): bool
     }
 
     if (preg_match('#^/api/v1/calls/([0-9]+)/signals$#', $path, $matches) && $method === 'POST') {
+        pc_rate_limit('call-signals', 300, 60);
         $user = pc_require_verified_user();
         $result = PCCallService::signal((int)$user['id'], (int)$matches[1], pc_input());
         pc_json($result['status'], $result['body']);
