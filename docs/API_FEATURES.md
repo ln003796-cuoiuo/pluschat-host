@@ -22,3 +22,11 @@ Existing installations must apply `database/migrations/001_social_features.sql` 
 - `DELETE /stories/{storyId}` — delete your own story.
 
 The story payload must use the `pc-e2ee-v1` envelope. This stores opaque ciphertext; it does not implement or prove the Android-side key exchange. Existing databases must also apply `database/migrations/003_stories.sql`.
+
+## Password recovery
+- `POST /auth/password/forgot` with an email address. The response does not reveal whether the account exists.
+- The email contains a one-hour recovery link to `/password-reset.php`.
+- `POST /auth/password/reset` with token and new password is also available to API clients.
+- A successful reset revokes all existing access tokens for that account.
+
+Existing installations must apply `database/migrations/004_password_recovery.sql` after the earlier migrations.
