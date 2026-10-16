@@ -30,6 +30,7 @@ $required = [
     'database/migrations/006_mandatory_two_factor.sql',
     'database/migrations/007_private_profile_avatars.sql',
     'security/services/TwoFactorService.php',
+    'profile/services/AvatarService.php',
     'public/password-reset.php',
     'database/migrate.php',
     'database/cleanup.php',
@@ -52,6 +53,10 @@ $registrationRepository = (string)file_get_contents($root . '/register/repositor
 if (!str_contains($registrationRepository, 'confirmCode') || !str_contains($registrationRepository, 'INTERVAL 15 MINUTE')) $errors[] = 'Short-lived email verification code flow is missing';
 $registrationMailer = (string)file_get_contents($root . '/register/mail/mailconfirm/Mailer.php');
 if (!str_contains($registrationMailer, 'Код подтверждения Pluschat')) $errors[] = 'Email verification code mailer is missing';
+$avatarService = (string)file_get_contents($root . '/profile/services/AvatarService.php');
+if (!str_contains($avatarService, '5 * 1024 * 1024') || !str_contains($avatarService, 'image/webp')) $errors[] = 'Private avatar validation is missing';
+$profileController = (string)file_get_contents($root . '/profile/api/Controller.php');
+if (!str_contains($profileController, '/api/v1/me/avatar')) $errors[] = 'Avatar API routes are missing';
 $twoFactorService = (string)file_get_contents($root . '/security/services/TwoFactorService.php');
 if (!str_contains($twoFactorService, 'sodium_crypto_secretbox') || !str_contains($twoFactorService, 'verifyCode')) $errors[] = 'Encrypted TOTP secret storage or TOTP validation is missing';
 $loginService = (string)file_get_contents($root . '/login/services/LoginService.php');
