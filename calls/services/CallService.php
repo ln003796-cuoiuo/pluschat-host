@@ -47,7 +47,7 @@ final class PCCallService
         $pdo = pc_db();
         $call = PCCallRepository::visibleCall($pdo, $callId, $userId);
         if (!$call) return ['status' => 404, 'body' => ['ok' => false, 'error' => 'call_not_found']];
-        if (in_array($call['status'], ['declined','missed','ended','failed'], true) || strtotime((string)$call['expires_at']) <= time()) {
+        if (in_array($call['status'], ['declined','missed','ended','failed'], true) || ($call['status'] === 'ringing' && strtotime((string)$call['expires_at'] . ' UTC') <= time())) {
             return ['status' => 410, 'body' => ['ok' => false, 'error' => 'call_expired_or_ended']];
         }
 
@@ -68,7 +68,7 @@ final class PCCallService
         $pdo->beginTransaction();
         try {
             if ($type === 'answer') {
-                $stmt = $pdo->prepare("UPDATE calls SET status = 'accepted', answered_at = UTC_TIMESTAMP() WHERE id = ? AND status = 'ringing'");
+                $stmt = $pdo->prepare("UPDATE calls SET status = 'accepted', answered_at = UTC_TIMESTAMP(), expires_at = DATE_ADD(UTC_TIMESTAMP(), INTERVAL 12 HOUR) WHERE id = ? AND status = 'ringing'");
                 $stmt->execute([$callId]);
             } elseif ($type === 'decline') {
                 $stmt = $pdo->prepare("UPDATE calls SET status = 'declined', ended_at = UTC_TIMESTAMP() WHERE id = ? AND status IN ('ringing','accepted')");
