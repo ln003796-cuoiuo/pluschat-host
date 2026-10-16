@@ -10,7 +10,7 @@ header('Cache-Control: no-store');
 header('Permissions-Policy: geolocation=(), microphone=(self), camera=(self)');
 header('Cross-Origin-Opener-Policy: same-origin');
 if (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') {
-    header('Strict-Transport-Security: max-age=31536000; includeSubDomains');
+    header('Strict-Transport-Security: max-age=31536000');
 }
 
 $origin = $_SERVER['HTTP_ORIGIN'] ?? '';
