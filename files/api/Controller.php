@@ -45,5 +45,22 @@ function pc_files_dispatch(string $path, string $method): bool
                 throw $e;
             }
         }
+
+    if (preg_match('#^/api/v1/attachments/([0-9]+)$#', $path, $matches) && $method === 'GET') {
+                $user = pc_require_verified_user();
+                $attachmentId = (int)$matches[1];
+                $stmt = pc_db()->prepare('SELECT a.storage_key, a.original_name, a.byte_size FROM message_attachments a JOIN messages m ON m.id = a.message_id JOIN conversation_members cm ON cm.conversation_id = m.conversation_id WHERE a.id = ? AND cm.user_id = ? LIMIT 1');
+                $stmt->execute([$attachmentId, $user['id']]);
+                $attachment = $stmt->fetch();
+                if (!$attachment) pc_json(404, ['ok' => false, 'error' => 'attachment_not_found']);
+                $pathOnDisk = dirname(__DIR__) . '/storage/uploads/' . basename((string)$attachment['storage_key']);
+                if (!is_file($pathOnDisk)) pc_json(404, ['ok' => false, 'error' => 'attachment_file_missing']);
+                header('Content-Type: application/octet-stream');
+                header('Content-Length: ' . (string)filesize($pathOnDisk));
+                header('Content-Disposition: attachment; filename="encrypted.bin"');
+                header('X-Content-Type-Options: nosniff');
+                readfile($pathOnDisk);
+                exit;
+            }
     return false;
 }
