@@ -72,7 +72,7 @@ foreach ($requiredFiles as $relative) {
 
 $schema = (string)file_get_contents($root . '/database/schema.sql');
 foreach (['users', 'auth_tokens', 'conversations', 'messages', 'chat_groups', 'channels', 'topics', 'message_attachments', 'notifications', 'reports'] as $table) {
-    if (!preg_match('/CREATE\\s+TABLE\\s+IF\\s+NOT\\s+EXISTS\\s+' . preg_quote($table, '/') . '\\b/i', $schema)) {
+    if (!preg_match('/CREATE\s+TABLE\s+IF\s+NOT\s+EXISTS\s+' . preg_quote($table, '/') . '\b/i', $schema)) {
         $errors[] = 'Missing schema table: ' . $table;
     }
 }
