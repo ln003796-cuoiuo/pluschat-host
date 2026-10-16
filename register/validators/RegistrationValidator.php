@@ -21,6 +21,9 @@ final class PCRegistrationValidator
         if (strlen($password) < 10 || strlen($password) > 200) {
             return ['error' => 'invalid_password', 'message' => 'Пароль должен содержать от 10 до 200 символов.'];
         }
+        if ($firstName === '') {
+            return ['error' => 'first_name_required', 'message' => 'Имя обязательно для регистрации.'];
+        }
         if (pc_len($firstName) > 80 || pc_len($lastName) > 80) {
             return ['error' => 'profile_field_too_long'];
         }
