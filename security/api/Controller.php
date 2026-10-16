@@ -14,7 +14,7 @@ function pc_security_dispatch(string $path, string $method): bool
     if ($path === '/api/v1/security/keys' && $method === 'POST') {
         $user = pc_require_verified_user();
         $header = $_SERVER['HTTP_AUTHORIZATION'] ?? '';
-        if (!preg_match('/^Bearer\\s+([a-f0-9]{64})$/i', $header, $matches)) {
+        if (!preg_match('/^Bearer\s+([a-f0-9]{64})$/i', $header, $matches)) {
             pc_json(401, ['ok' => false, 'error' => 'authentication_required']);
         }
         $tokenStmt = pc_db()->prepare('SELECT device_key_hash FROM auth_tokens WHERE token_hash = ? AND user_id = ? AND expires_at > UTC_TIMESTAMP() LIMIT 1');
