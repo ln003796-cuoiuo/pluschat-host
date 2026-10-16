@@ -107,6 +107,12 @@ function pc_messages_dispatch(string $path, string $method): bool
         pc_json(200, ['ok' => true, 'message_id' => (string)$messageId, 'deleted' => true, 'for_everyone' => $forEveryone]);
     }
 
+    if (preg_match('#^/api/v1/messages/([0-9]+)/reactions$#', $path, $matches) && $method === 'GET') {
+        $user = pc_require_verified_user();
+        $result = PCReactionService::list((int)$user['id'], (int)$matches[1]);
+        pc_json($result['status'], $result['body']);
+    }
+
     if (preg_match('#^/api/v1/messages/([0-9]+)/reactions$#', $path, $matches) && $method === 'POST') {
         $user = pc_require_verified_user();
         $data = pc_input();
