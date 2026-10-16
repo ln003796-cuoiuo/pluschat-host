@@ -103,6 +103,20 @@ $entrySource = (string)file_get_contents($root . '/public/index.php');
 if (!str_contains($entrySource, "'schema' => 'ready'") || !str_contains($entrySource, "'schema' => 'incomplete'")) {
     $errors[] = 'Health endpoint must distinguish a ready schema from an incomplete schema';
 }
+
+$rateLimitedWrites = [
+    'messages/api/Controller.php' => 'message-send',
+    'groups/api/Controller.php' => 'group-message-send',
+    'channels/api/Controller.php' => 'channel-post-send',
+    'topics/api/Controller.php' => 'topic-message-send',
+    'files/api/Controller.php' => 'attachment-upload',
+];
+foreach ($rateLimitedWrites as $relative => $bucket) {
+    $source = (string)file_get_contents($root . '/' . $relative);
+    if (!str_contains($source, "pc_rate_limit('" . $bucket . "'")) {
+        $errors[] = 'Missing write rate limit in: ' . $relative;
+    }
+}
 foreach (explode("\n", $schema) as $lineNumber => $line) {
     if (str_starts_with(trim($line), '--') && str_contains($line, ';')) {
         $errors[] = 'SQL installer may split a comment at line ' . ($lineNumber + 1);
