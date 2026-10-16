@@ -25,11 +25,11 @@ final class PCRegistrationRepository
             ]);
             $userId = (int)$pdo->lastInsertId();
             $pdo->prepare('INSERT INTO user_settings (user_id) VALUES (?)')->execute([$userId]);
-            $token = bin2hex(random_bytes(32));
-            $verify = $pdo->prepare('INSERT INTO email_verification_tokens (user_id, token_hash, expires_at) VALUES (?, ?, DATE_ADD(UTC_TIMESTAMP(), INTERVAL 24 HOUR))');
-            $verify->execute([$userId, hash('sha256', $token)]);
+            $code = str_pad((string)random_int(0, 999999), 6, '0', STR_PAD_LEFT);
+            $verify = $pdo->prepare('INSERT INTO email_verification_tokens (user_id, token_hash, expires_at) VALUES (?, ?, DATE_ADD(UTC_TIMESTAMP(), INTERVAL 15 MINUTE))');
+            $verify->execute([$userId, hash('sha256', $user['email'] . '|' . $code)]);
             $pdo->commit();
-            return $token;
+            return $code;
         } catch (Throwable $e) {
             if ($pdo->inTransaction()) {
                 $pdo->rollBack();
@@ -60,6 +60,25 @@ final class PCRegistrationRepository
         return true;
     }
 
+    public static function confirmCode(PDO $pdo, string $email, string $code): bool
+    {
+        if (!preg_match('/^[0-9]{6}$/', $code)) return false;
+        $stmt = $pdo->prepare('SELECT id, user_id FROM email_verification_tokens WHERE token_hash = ? AND expires_at > UTC_TIMESTAMP() LIMIT 1');
+        $stmt->execute([hash('sha256', strtolower($email) . '|' . $code)]);
+        $record = $stmt->fetch();
+        if (!$record) return false;
+        $pdo->beginTransaction();
+        try {
+            $pdo->prepare('UPDATE users SET email_verified_at = UTC_TIMESTAMP() WHERE id = ?')->execute([$record['user_id']]);
+            $pdo->prepare('DELETE FROM email_verification_tokens WHERE user_id = ?')->execute([$record['user_id']]);
+            $pdo->commit();
+        } catch (Throwable $e) {
+            if ($pdo->inTransaction()) $pdo->rollBack();
+            throw $e;
+        }
+        return true;
+    }
+
     public static function unverifiedByEmail(PDO $pdo, string $email): ?array
     {
         $stmt = $pdo->prepare('SELECT id, email, username, email_verified_at FROM users WHERE email = ? LIMIT 1');
@@ -70,10 +89,13 @@ final class PCRegistrationRepository
 
     public static function replaceVerificationToken(PDO $pdo, int $userId): string
     {
-        $token = bin2hex(random_bytes(32));
+        $stmt = $pdo->prepare('SELECT email FROM users WHERE id = ? LIMIT 1');
+        $stmt->execute([$userId]);
+        $email = strtolower((string)$stmt->fetchColumn());
+        $code = str_pad((string)random_int(0, 999999), 6, '0', STR_PAD_LEFT);
         $pdo->prepare('DELETE FROM email_verification_tokens WHERE user_id = ?')->execute([$userId]);
-        $pdo->prepare('INSERT INTO email_verification_tokens (user_id, token_hash, expires_at) VALUES (?, ?, DATE_ADD(UTC_TIMESTAMP(), INTERVAL 24 HOUR))')
-            ->execute([$userId, hash('sha256', $token)]);
-        return $token;
+        $pdo->prepare('INSERT INTO email_verification_tokens (user_id, token_hash, expires_at) VALUES (?, ?, DATE_ADD(UTC_TIMESTAMP(), INTERVAL 15 MINUTE))')
+            ->execute([$userId, hash('sha256', $email . '|' . $code)]);
+        return $code;
     }
 }
