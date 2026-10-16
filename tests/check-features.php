@@ -43,6 +43,15 @@ $index = (string)file_get_contents($root . '/public/index.php');
 foreach (['pc_friends_dispatch','pc_saved_dispatch','pc_polls_dispatch','pc_chatprefs_dispatch','pc_stories_dispatch','pc_password_dispatch'] as $route) {
     if (strpos($index, $route) === false) $errors[] = 'Router missing: ' . $route;
 }
+$registrationValidator = (string)file_get_contents($root . '/register/validators/RegistrationValidator.php');
+if (!str_contains($registrationValidator, 'first_name_required')) $errors[] = 'Registration must require first name';
+$registrationRepository = (string)file_get_contents($root . '/register/repositories/RegistrationRepository.php');
+if (!str_contains($registrationRepository, 'confirmCode') || !str_contains($registrationRepository, 'INTERVAL 15 MINUTE')) $errors[] = 'Short-lived email verification code flow is missing';
+$registrationMailer = (string)file_get_contents($root . '/register/mail/mailconfirm/Mailer.php');
+if (!str_contains($registrationMailer, 'Код подтверждения Pluschat')) $errors[] = 'Email verification code mailer is missing';
+$registrationController = (string)file_get_contents($root . '/register/api/Controller.php');
+if (!str_contains($registrationController, 'confirmCode')) $errors[] = 'Email code verification route is missing';
+
 $messageController = (string)file_get_contents($root . '/messages/api/Controller.php');
 if (!str_contains($messageController, 'messaging_blocked')) $errors[] = 'Direct-message block enforcement is missing';
 $attachmentRepo = (string)file_get_contents($root . '/files/repositories/AttachmentRepository.php');
