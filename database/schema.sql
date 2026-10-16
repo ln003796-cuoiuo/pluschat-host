@@ -255,3 +255,32 @@ CREATE TABLE IF NOT EXISTS notifications (
     INDEX idx_notifications_user (user_id, read_at, id),
     CONSTRAINT fk_notification_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+CREATE TABLE IF NOT EXISTS group_messages (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    group_id BIGINT UNSIGNED NOT NULL,
+    sender_id BIGINT UNSIGNED NOT NULL,
+    body TEXT NOT NULL,
+    body_encrypted TINYINT(1) NOT NULL DEFAULT 0,
+    encryption_version VARCHAR(32) NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    edited_at DATETIME NULL,
+    INDEX idx_group_messages_page (group_id, id),
+    CONSTRAINT fk_group_message_group FOREIGN KEY (group_id) REFERENCES chat_groups(id) ON DELETE CASCADE,
+    CONSTRAINT fk_group_message_sender FOREIGN KEY (sender_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS channel_posts (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    channel_id BIGINT UNSIGNED NOT NULL,
+    sender_id BIGINT UNSIGNED NOT NULL,
+    body TEXT NOT NULL,
+    body_encrypted TINYINT(1) NOT NULL DEFAULT 0,
+    encryption_version VARCHAR(32) NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    edited_at DATETIME NULL,
+    INDEX idx_channel_posts_page (channel_id, id),
+    CONSTRAINT fk_channel_post_channel FOREIGN KEY (channel_id) REFERENCES channels(id) ON DELETE CASCADE,
+    CONSTRAINT fk_channel_post_sender FOREIGN KEY (sender_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
