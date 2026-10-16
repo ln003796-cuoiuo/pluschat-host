@@ -55,6 +55,28 @@ final class PCAttachmentService
         ];
     }
 
+    public static function delete(int $userId, int $attachmentId): array
+    {
+        if ($attachmentId < 1) return ['status' => 422, 'body' => ['ok' => false, 'error' => 'invalid_attachment_id']];
+        $pdo = pc_db();
+        $pdo->beginTransaction();
+        try {
+            $row = PCAttachmentRepository::deleteForSender($pdo, $userId, $attachmentId);
+            if (!$row) {
+                $pdo->rollBack();
+                return ['status' => 404, 'body' => ['ok' => false, 'error' => 'attachment_not_found']];
+            }
+            $pdo->commit();
+            $key = basename((string)$row['storage_key']);
+            $path = self::storageDirectory() . '/' . $key;
+            if (is_file($path)) @unlink($path);
+            return ['status' => 200, 'body' => ['ok' => true, 'deleted' => true, 'attachment_id' => (string)$attachmentId]];
+        } catch (Throwable $e) {
+            if ($pdo->inTransaction()) $pdo->rollBack();
+            throw $e;
+        }
+    }
+
     public static function download(int $userId, int $attachmentId): array
     {
         if ($attachmentId < 1) return ['status' => 422, 'body' => ['ok' => false, 'error' => 'invalid_attachment_id']];
