@@ -29,6 +29,7 @@ $required = [
     'database/migrations/005_message_hiding.sql',
     'public/password-reset.php',
     'database/migrate.php',
+    'database/cleanup.php',
 ];
 $errors = [];
 foreach ($required as $file) {
@@ -50,7 +51,9 @@ if (!str_contains($attachmentRepo, 'deleteForSender')) $errors[] = 'Sender-autho
 $attachmentController = (string)file_get_contents($root . '/files/api/Controller.php');
 if (!str_contains($attachmentController, '/delete$')) $errors[] = 'Attachment delete API route is missing';
 $migrationRunner = (string)file_get_contents($root . '/database/migrate.php');
+$cleanupRunner = (string)file_get_contents($root . '/database/cleanup.php');
 if (!str_contains($migrationRunner, "PHP_SAPI !== 'cli'")) $errors[] = 'Migration runner must refuse web requests';
+if (!str_contains($cleanupRunner, "PHP_SAPI !== 'cli'")) $errors[] = 'Cleanup runner must refuse web requests';
 
 if ($errors) {
     fwrite(STDERR, implode(PHP_EOL, $errors) . PHP_EOL);
