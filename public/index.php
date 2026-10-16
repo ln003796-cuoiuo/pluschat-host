@@ -80,7 +80,7 @@ try {
             'channel_members', 'topics', 'topic_messages', 'message_attachments',
             'message_receipts', 'message_reactions', 'reports', 'admin_users',
             'notifications', 'group_messages', 'channel_posts', 'api_rate_limits',
-            'user_crypto_keys', 'calls', 'call_signals',
+            'user_crypto_keys', 'calls', 'call_signals', 'friend_requests', 'friendships', 'saved_messages', 'polls', 'poll_options', 'poll_votes',
         ];
         $stmt = $pdo->prepare(
             'SELECT COUNT(*) FROM information_schema.tables
