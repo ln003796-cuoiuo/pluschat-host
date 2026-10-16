@@ -1,6 +1,8 @@
 <?php
 declare(strict_types=1);
 
+require_once dirname(__DIR__) . '/services/ReactionService.php';
+
 /* Conversation message history and read receipts. */
 function pc_messages_dispatch(string $path, string $method): bool
 {
@@ -52,5 +54,22 @@ function pc_messages_dispatch(string $path, string $method): bool
                 header('Allow: GET, POST');
                 pc_json(405, ['ok' => false, 'error' => 'method_not_allowed']);
             }
+
+    if (preg_match('#^/api/v1/messages/([0-9]+)/reactions$#', $path, $matches) && $method === 'POST') {
+        $user = pc_require_verified_user();
+        $data = pc_input();
+        $reaction = is_string($data['reaction'] ?? null) ? trim($data['reaction']) : '';
+        $result = PCReactionService::add((int)$user['id'], (int)$matches[1], $reaction);
+        pc_json($result['status'], $result['body']);
+    }
+
+    if (preg_match('#^/api/v1/messages/([0-9]+)/reactions/remove$#', $path, $matches) && $method === 'POST') {
+        $user = pc_require_verified_user();
+        $data = pc_input();
+        $reaction = is_string($data['reaction'] ?? null) ? trim($data['reaction']) : '';
+        $result = PCReactionService::remove((int)$user['id'], (int)$matches[1], $reaction);
+        pc_json($result['status'], $result['body']);
+    }
+
     return false;
 }
