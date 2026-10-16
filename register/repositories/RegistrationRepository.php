@@ -5,8 +5,8 @@ final class PCRegistrationRepository
 {
     public static function isTaken(PDO $pdo, string $email, string $username, string $phone = ''): bool
     {
-        $stmt = $pdo->prepare('SELECT id FROM users WHERE email = ? OR username = ? OR (? <> "" AND phone = ?) LIMIT 1');
-        $stmt->execute([$email, $username, $phone, $phone]);
+        $stmt = $pdo->prepare('SELECT id FROM users WHERE email = ? OR username = ? OR phone = ? LIMIT 1');
+        $stmt->execute([$email, $username, $phone]);
         return (bool)$stmt->fetch();
     }
 
