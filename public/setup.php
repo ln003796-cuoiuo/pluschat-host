@@ -97,6 +97,7 @@ if (!$alreadyConfigured && ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
                 'db_name' => $name,
                 'db_user' => $user,
                 'db_password' => $password,
+                'app_secret' => bin2hex(random_bytes(32)),
                 'mail_from' => 'register@плюсчат.рф',
                 'app_base_url' => 'https://xn--80avljg2a1c.xn--p1ai',
                 'allowed_origins' => [
