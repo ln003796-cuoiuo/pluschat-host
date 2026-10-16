@@ -44,3 +44,7 @@ Existing installations must apply `database/migrations/004_password_recovery.sql
 
 ## Applying migrations to an existing installation
 Run `php database/migrate.php` using PHP CLI from the project root after `config.php` exists. The runner refuses web requests and records completed migration filenames in `schema_migrations`. Take a database backup before applying updates. A fresh installation continues to use `database/schema.sql` through the setup page.
+
+## Message reactions
+- `GET /messages/{messageId}/reactions` returns reaction counts and whether the current user selected each reaction.
+- `POST /messages/{messageId}/reactions` adds a reaction; `POST /messages/{messageId}/reactions/remove` removes it. Both write routes are rate-limited and require conversation membership.
