@@ -26,8 +26,10 @@ CREATE TABLE IF NOT EXISTS auth_tokens (
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
     user_id BIGINT UNSIGNED NOT NULL,
     token_hash CHAR(64) NOT NULL UNIQUE,
+    device_key_hash CHAR(64) NULL,
     expires_at DATETIME NOT NULL,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_auth_device (user_id, device_key_hash),
     CONSTRAINT fk_auth_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
     INDEX idx_auth_user (user_id),
     INDEX idx_auth_expiry (expires_at)
