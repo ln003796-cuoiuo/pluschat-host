@@ -30,3 +30,8 @@ The story payload must use the `pc-e2ee-v1` envelope. This stores opaque ciphert
 - A successful reset revokes all existing access tokens for that account.
 
 Existing installations must apply `database/migrations/004_password_recovery.sql` after the earlier migrations.
+
+## Message actions
+- `POST /messages/{messageId}/edit` accepts a new encrypted message envelope. The author may edit for 48 hours.
+- `POST /messages/{messageId}/delete` accepts `for_everyone` as a boolean. Delete-for-everyone is author-only; delete-for-me hides the message only for the current user.
+- Apply `database/migrations/005_message_hiding.sql` on existing installations.
