@@ -18,7 +18,7 @@ function pc_login_dispatch(string $path, string $method): bool
     }
 
     if ($path === '/api/v1/auth/logout' && $method === 'POST') {
-        pc_require_verified_user();
+        pc_token_user(true);
         PCLoginRepository::revokeBearer(pc_db(), $_SERVER['HTTP_AUTHORIZATION'] ?? '');
         pc_json(200, ['ok' => true, 'logged_out' => true]);
     }
