@@ -9,6 +9,11 @@ $configPath = dirname(__DIR__) . '/config.php';
 $alreadyConfigured = is_file($configPath);
 $error = '';
 $success = false;
+$requirements = [];
+if (PHP_VERSION_ID < 80100) $requirements[] = 'PHP 8.1 или новее';
+if (!extension_loaded('pdo_mysql')) $requirements[] = 'расширение pdo_mysql';
+if (!extension_loaded('sodium')) $requirements[] = 'расширение sodium для криптографии';
+if (!filter_var((string)ini_get('file_uploads'), FILTER_VALIDATE_BOOLEAN)) $requirements[] = 'включённая загрузка файлов (file_uploads)';
 
 if (session_status() !== PHP_SESSION_ACTIVE) {
     ini_set('session.use_strict_mode', '1');
@@ -33,6 +38,8 @@ if (!$alreadyConfigured && ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
         $error = 'Введите пароль базы данных.';
     } elseif (empty($_SERVER['HTTPS']) || $_SERVER['HTTPS'] === 'off') {
         $error = 'Для безопасной настройки сначала включите HTTPS на домене.';
+    } elseif ($requirements !== []) {
+        $error = 'Хостинг пока не готов. Необходимо включить: ' . implode(', ', $requirements) . '.';
     } else {
         try {
             $host = 'localhost';
@@ -129,6 +136,9 @@ button{width:100%;margin-top:16px;border:0;border-radius:12px;padding:15px;backg
     <div class="pill">ОДИН РАЗ · ТОЛЬКО ПАРОЛЬ БД</div>
     <h1>Подключить базу данных</h1>
     <p>Имя базы, пользователь, адрес сервера и адрес Pluschat уже указаны. Введите только пароль MySQL. После проверки сервер автоматически создаст нужные таблицы и сохранит настройки вне публичной папки.</p>
+    <?php if ($requirements !== []): ?>
+      <div class="notice error">Для работы сервера хостинг должен поддерживать: <?= htmlspecialchars(implode(', ', $requirements), ENT_QUOTES, 'UTF-8') ?>.</div>
+    <?php endif; ?>
     <form method="post" autocomplete="off">
       <input type="hidden" name="csrf" value="<?= htmlspecialchars((string)$_SESSION['pluschat_setup_csrf'], ENT_QUOTES, 'UTF-8') ?>">
       <label for="db_password">Пароль базы данных</label>
