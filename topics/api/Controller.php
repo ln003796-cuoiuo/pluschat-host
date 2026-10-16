@@ -2,32 +2,14 @@
 declare(strict_types=1);
 
 /* Topic message feeds and topic-to-channel conversion. */
+require_once dirname(__DIR__) . '/services/TopicService.php';
 function pc_topics_dispatch(string $path, string $method): bool
 {
     if (preg_match('#^/api/v1/topics/([0-9]+)/messages$#', $path, $matches) && ($method === 'GET' || $method === 'POST')) {
-                $user = pc_require_verified_user();
-                $topicId = (int)$matches[1];
-                $access = pc_db()->prepare('SELECT t.id, t.group_id, t.channel_id FROM topics t WHERE t.id = ? AND ((t.group_id IS NOT NULL AND EXISTS (SELECT 1 FROM group_members gm WHERE gm.group_id = t.group_id AND gm.user_id = ?)) OR (t.channel_id IS NOT NULL AND EXISTS (SELECT 1 FROM channel_members cm WHERE cm.channel_id = t.channel_id AND cm.user_id = ?)))');
-                $access->execute([$topicId, $user['id'], $user['id']]);
-                if (!$access->fetch()) pc_json(404, ['ok' => false, 'error' => 'topic_not_found']);
-                if ($method === 'GET') {
-                    $limit = filter_var($_GET['limit'] ?? 50, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1, 'max_range' => 100]]) ?: 50;
-                    $before = filter_var($_GET['before'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
-                    $sql = 'SELECT id, sender_id, body, body_encrypted, created_at, edited_at FROM topic_messages WHERE topic_id = ?';
-                    $params = [$topicId];
-                    if ($before) { $sql .= ' AND id < ?'; $params[] = $before; }
-                    $sql .= ' ORDER BY id DESC LIMIT ' . (int)$limit;
-                    $stmt = pc_db()->prepare($sql);
-                    $stmt->execute($params);
-                    pc_json(200, ['ok' => true, 'messages' => array_reverse($stmt->fetchAll())]);
-                }
-                $data = pc_input();
-                $body = pc_string($data, 'body');
-                $encrypted = filter_var($data['encrypted'] ?? false, FILTER_VALIDATE_BOOLEAN) ? 1 : 0;
-                if ($body === '' || pc_len($body) > 4000) pc_json(422, ['ok' => false, 'error' => 'message_must_be_1_to_4000_characters']);
-                pc_db()->prepare('INSERT INTO topic_messages (topic_id, sender_id, body, body_encrypted) VALUES (?, ?, ?, ?)')->execute([$topicId, $user['id'], $body, $encrypted]);
-                pc_json(201, ['ok' => true, 'message' => ['id' => (string)pc_db()->lastInsertId(), 'topic_id' => (string)$topicId, 'sender_id' => (string)$user['id'], 'body' => $body, 'encrypted' => (bool)$encrypted, 'created_at' => gmdate('Y-m-d H:i:s')]]);
-            }
+        $user = pc_require_verified_user();
+        $result = PCTopicService::messages((int)$user['id'], (int)$matches[1], $method, $_GET, $method === 'POST' ? pc_input() : []);
+        pc_json($result['status'], $result['body']);
+    }
 
     if (preg_match('#^/api/v1/topics/([0-9]+)/convert-to-channel$#', $path, $matches) && $method === 'POST') {
                 $user = pc_require_verified_user();
