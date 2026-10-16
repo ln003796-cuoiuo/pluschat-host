@@ -89,6 +89,7 @@ try {
     }
 
     // Feature-based API modules. Each module owns its routes; unmatched requests continue.
+    require_once dirname(__DIR__) . '/notifications/api/Controller.php';
     require_once dirname(__DIR__) . '/profile/api/Controller.php';
     require_once dirname(__DIR__) . '/users/api/Controller.php';
     require_once dirname(__DIR__) . '/chats/api/Controller.php';
@@ -100,6 +101,7 @@ try {
     require_once dirname(__DIR__) . '/api/integrations/calls/api/Controller.php';
     require_once dirname(__DIR__) . '/admin/api/Controller.php';
     require_once dirname(__DIR__) . '/files/api/Controller.php';
+    if (pc_notifications_dispatch($path, $method)) { exit; }
     if (pc_profile_dispatch($path, $method)) { exit; }
     if (pc_users_dispatch($path, $method)) { exit; }
     if (pc_chats_dispatch($path, $method)) { exit; }
@@ -121,75 +123,6 @@ try {
     if (pc_login_dispatch($path, $method)) {
         exit;
     }
-
-    
-
-    
-
-    
-
-    
-
-
-    
-
-    
-
-
-
-    
-
-    
-
-    
-
-
-    
-
-    
-
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-
-    
-
-    
-
-    
-
-    
 
     pc_json(404, ['ok' => false, 'error' => 'endpoint_not_found', 'path' => $path]);
 } catch (PDOException $e) {
