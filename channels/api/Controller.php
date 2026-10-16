@@ -81,7 +81,7 @@ function pc_channels_dispatch(string $path, string $method): bool
                 if ($method === 'GET') {
                     $limit = filter_var($_GET['limit'] ?? 50, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1, 'max_range' => 100]]) ?: 50;
                     $before = filter_var($_GET['before'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
-                    $sql = 'SELECT id, sender_id, body, body_encrypted, encryption_version, created_at, edited_at FROM channel_posts WHERE channel_id = ?';
+                    $sql = 'SELECT id, sender_id, body, body_encrypted, encryption_version, created_at, edited_at FROM channel_posts WHERE channel_id = ? AND body_encrypted = 1';
                     $params = [$channelId];
                     if ($before) { $sql .= ' AND id < ?'; $params[] = $before; }
                     $sql .= ' ORDER BY id DESC LIMIT ' . (int)$limit;
@@ -91,12 +91,10 @@ function pc_channels_dispatch(string $path, string $method): bool
                 }
                 if (!in_array($role, ['owner', 'admin'], true)) pc_json(403, ['ok' => false, 'error' => 'channel_posting_restricted']);
                 $data = pc_input();
-                $body = pc_string($data, 'body');
-                $encrypted = filter_var($data['encrypted'] ?? false, FILTER_VALIDATE_BOOLEAN) ? 1 : 0;
-                $version = $encrypted ? (pc_string($data, 'encryption_version') ?: 'client-v1') : null;
-                if ($body === '' || pc_len($body) > 4000 || ($encrypted && strlen($body) > 12000)) pc_json(422, ['ok' => false, 'error' => 'invalid_post_body']);
-                pc_db()->prepare('INSERT INTO channel_posts (channel_id, sender_id, body, body_encrypted, encryption_version) VALUES (?, ?, ?, ?, ?)')->execute([$channelId, $user['id'], $body, $encrypted, $version]);
-                pc_json(201, ['ok' => true, 'post' => ['id' => (string)pc_db()->lastInsertId(), 'channel_id' => (string)$channelId, 'sender_id' => (string)$user['id'], 'body' => $body, 'encrypted' => (bool)$encrypted, 'encryption_version' => $version, 'created_at' => gmdate('Y-m-d H:i:s')]]);
+                $envelope = pc_encrypted_envelope($data['body'] ?? null);
+                if (!$envelope) pc_json(422, ['ok' => false, 'error' => 'encrypted_message_envelope_required', 'format' => 'pc-e2ee-v1']);
+                pc_db()->prepare('INSERT INTO channel_posts (channel_id, sender_id, body, body_encrypted, encryption_version) VALUES (?, ?, ?, 1, ?)')->execute([$channelId, $user['id'], $envelope['body'], $envelope['version']]);
+                pc_json(201, ['ok' => true, 'post' => ['id' => (string)pc_db()->lastInsertId(), 'channel_id' => (string)$channelId, 'sender_id' => (string)$user['id'], 'body' => $envelope['body'], 'encrypted' => true, 'encryption_version' => $envelope['version'], 'created_at' => gmdate('Y-m-d H:i:s')]]);
             }
     return false;
 }
