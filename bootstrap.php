@@ -21,7 +21,7 @@ function pc_db(): PDO {
     }
     $host = (string) pc_config('db_host', 'localhost');
     $name = (string) pc_config('db_name', 'pluschat');
-    $user = (string) pc_config('db_user', 'Admin');
+    $user = (string) pc_config('db_user', 'admin');
     $password = (string) pc_config('db_password', '');
     if ($password === '') {
         throw new RuntimeException('Database password is not configured on the server.');
