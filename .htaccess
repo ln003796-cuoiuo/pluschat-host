@@ -1,5 +1,16 @@
 Options -Indexes
 DirectoryIndex public/index.php
-<FilesMatch "^(config\.php|\.env|composer\.(json|lock)|schema\.sql)$">
+
+RewriteEngine On
+
+# Keep source, configuration and database files out of public access.
+RewriteRule ^(?:bootstrap\.php|config(?:\.example)?\.php|database(?:/|$)|storage(?:/|$)|\.git(?:/|$)) - [F,L,NC]
+
+# Route API URLs to the single PHP entry point.
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^ public/index.php [QSA,L]
+
+<FilesMatch "^(?:config(?:\.example)?\.php|bootstrap\.php|\.env|composer\.(?:json|lock))$">
     Require all denied
 </FilesMatch>
