@@ -47,6 +47,18 @@ function pc_messages_dispatch(string $path, string $method): bool
                     $data = pc_input();
                     $envelope = pc_encrypted_envelope($data['body'] ?? null);
                     if (!$envelope) pc_json(422, ['ok' => false, 'error' => 'encrypted_message_envelope_required', 'format' => 'pc-e2ee-v1']);
+                    $direct = pc_db()->prepare('SELECT COUNT(*) FROM conversation_members WHERE conversation_id = ?');
+                    $direct->execute([$conversationId]);
+                    if ((int)$direct->fetchColumn() === 2) {
+                        $blocked = pc_db()->prepare(
+                            'SELECT 1 FROM conversation_members peer
+                             JOIN user_blocks b ON (b.user_id = ? AND b.blocked_user_id = peer.user_id)
+                                  OR (b.user_id = peer.user_id AND b.blocked_user_id = ?)
+                             WHERE peer.conversation_id = ? AND peer.user_id <> ? LIMIT 1'
+                        );
+                        $blocked->execute([$user['id'], $user['id'], $conversationId, $user['id']]);
+                        if ($blocked->fetchColumn()) pc_json(403, ['ok' => false, 'error' => 'messaging_blocked']);
+                    }
                     $stmt = pc_db()->prepare('INSERT INTO messages (conversation_id, sender_id, body, body_encrypted, encryption_version) VALUES (?, ?, ?, 1, ?)');
                     $stmt->execute([$conversationId, $user['id'], $envelope['body'], $envelope['version']]);
                     pc_json(201, ['ok' => true, 'message' => [
