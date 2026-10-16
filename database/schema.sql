@@ -115,6 +115,7 @@ CREATE TABLE IF NOT EXISTS chat_groups (
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX idx_groups_owner (owner_id),
     INDEX idx_groups_area (group_kind, area_code),
+    UNIQUE KEY uq_group_kind_area (group_kind, area_code),
     CONSTRAINT fk_group_owner FOREIGN KEY (owner_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
