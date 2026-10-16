@@ -62,7 +62,10 @@ $requiredFiles = [
     'security/services/DeviceService.php',
     'admin/api/Controller.php',
     'admin/services/ReportService.php',
-    'api/integrations/calls/api/Controller.php',
+    'calls/api/Controller.php',
+    'calls/services/CallService.php',
+    'calls/repositories/CallRepository.php',
+    'calls/validators/CallValidator.php',
 ];
 foreach ($requiredFiles as $relative) {
     if (!is_file($root . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $relative))) {
@@ -71,7 +74,7 @@ foreach ($requiredFiles as $relative) {
 }
 
 $schema = (string)file_get_contents($root . '/database/schema.sql');
-foreach (['users', 'auth_tokens', 'conversations', 'messages', 'chat_groups', 'channels', 'topics', 'message_attachments', 'notifications', 'reports'] as $table) {
+foreach (['users', 'auth_tokens', 'conversations', 'messages', 'chat_groups', 'channels', 'topics', 'message_attachments', 'notifications', 'reports', 'user_crypto_keys', 'calls', 'call_signals'] as $table) {
     if (!preg_match('/CREATE\s+TABLE\s+IF\s+NOT\s+EXISTS\s+' . preg_quote($table, '/') . '\b/i', $schema)) {
         $errors[] = 'Missing schema table: ' . $table;
     }
