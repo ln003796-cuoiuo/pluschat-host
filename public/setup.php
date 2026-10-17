@@ -117,7 +117,7 @@ if (!$alreadyConfigured && ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
                 'db_password' => $password,
                 // Set privately by the hosting environment if configured. Never commit API keys.
                 'textbee_api_key' => (string)(getenv('PLUSCHAT_TEXTBEE_API_KEY') ?: ''),
-                'textbee_device_id' => (string)(getenv('PLUSCHAT_TEXTBEE_DEVICE_ID') ?: ''),
+                'textbee_device_id' => (string)(getenv('PLUSCHAT_TEXTBEE_DEVICE_ID') ?: '6ad27e0e10b63ade60583c87'),
                 'app_secret' => bin2hex(random_bytes(32)),
                 'mail_from' => 'register@плюсчат.рф',
                 'app_base_url' => 'https://xn--80avljg2a1c.xn--p1ai',
