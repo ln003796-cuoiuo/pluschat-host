@@ -70,16 +70,22 @@ if (!$alreadyConfigured && ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
                 }
             }
 
-            // Upgrade an existing database too: importing schema.sql alone cannot add
-            // columns to a users table that already exists.
-            $migrationPath = dirname(__DIR__) . '/database/migrations/008_textbee_phone_verification.sql';
-            $migration = is_file($migrationPath) ? file_get_contents($migrationPath) : false;
-            if ($migration === false || trim($migration) === '') {
-                throw new RuntimeException('Phone verification migration unavailable');
+            // Apply every idempotent migration in version order. This upgrades existing
+            // databases as well as fresh installs; schema.sql alone does not ALTER old tables.
+            $migrationFiles = glob(dirname(__DIR__) . '/database/migrations/*.sql') ?: [];
+            sort($migrationFiles, SORT_STRING);
+            if ($migrationFiles === []) {
+                throw new RuntimeException('Database migrations unavailable');
             }
-            foreach (explode(';', $migration) as $statement) {
-                $statement = trim($statement);
-                if ($statement !== '') $pdo->exec($statement);
+            foreach ($migrationFiles as $migrationPath) {
+                $migration = file_get_contents($migrationPath);
+                if ($migration === false || trim($migration) === '') {
+                    throw new RuntimeException('Migration unavailable: ' . basename($migrationPath));
+                }
+                foreach (explode(';', $migration) as $statement) {
+                    $statement = trim($statement);
+                    if ($statement !== '') $pdo->exec($statement);
+                }
             }
 
             $requiredTables = [
@@ -111,6 +117,7 @@ if (!$alreadyConfigured && ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
                 'db_password' => $password,
                 // Set privately by the hosting environment if configured. Never commit API keys.
                 'textbee_api_key' => (string)(getenv('PLUSCHAT_TEXTBEE_API_KEY') ?: ''),
+                'textbee_device_id' => (string)(getenv('PLUSCHAT_TEXTBEE_DEVICE_ID') ?: ''),
                 'app_secret' => bin2hex(random_bytes(32)),
                 'mail_from' => 'register@плюсчат.рф',
                 'app_base_url' => 'https://xn--80avljg2a1c.xn--p1ai',
