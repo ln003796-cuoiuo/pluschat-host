@@ -50,9 +50,10 @@ foreach (['pc_friends_dispatch','pc_saved_dispatch','pc_polls_dispatch','pc_chat
     if (strpos($index, $route) === false) $errors[] = 'Router missing: ' . $route;
 }
 $setup = (string)file_get_contents($root . '/public/setup.php');
-if (!str_contains($setup, '008_textbee_phone_verification.sql') || !str_contains($setup, 'phone_verification_codes')) $errors[] = 'Installer must apply and verify phone verification migration';
+if (!str_contains($setup, 'database/migrations/*.sql') || !str_contains($setup, 'phone_verification_codes') || !str_contains($setup, 'textbee_device_id')) $errors[] = 'Installer must apply all migrations and keep TextBee settings private';
 $textBee = (string)file_get_contents($root . '/register/services/TextBeeService.php');
 if (!str_contains($textBee, 'PLUSCHAT_TEXTBEE_API_KEY') || !str_contains($textBee, 'x-api-key')) $errors[] = 'TextBee must read its key privately and authenticate SMS requests';
+if (!str_contains($textBee, 'PLUSCHAT_TEXTBEE_DEVICE_ID') || !str_contains($textBee, "'deviceId' => \$deviceId")) $errors[] = 'TextBee request must include the configured gateway device ID';
 $registrationValidator = (string)file_get_contents($root . '/register/validators/RegistrationValidator.php');
 if (!str_contains($registrationValidator, 'invalid_phone')) $errors[] = 'Registration must validate phone number';
 if (!str_contains($registrationValidator, 'first_name_required')) $errors[] = 'Registration must require first name';
