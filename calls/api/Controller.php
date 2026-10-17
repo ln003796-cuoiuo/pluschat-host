@@ -103,6 +103,10 @@ function pc_calls_dispatch(string $path, string $method): bool
     $action = $m[2] ?? '';
     $pdo = pc_db();
     $call = pc_call_participant($callId, (int)$user['id']);
+    if (in_array($call['participant_status'], ['declined', 'left'], true)
+        && !($action === '' && $method === 'GET')) {
+        pc_json(403, ['ok' => false, 'error' => 'call_participant_inactive']);
+    }
 
     if ($action === '' && $method === 'GET') {
         $stmt = $pdo->prepare(
@@ -134,7 +138,11 @@ function pc_calls_dispatch(string $path, string $method): bool
         )->execute([$callId, $user['id']]);
         $joined = $pdo->prepare("SELECT COUNT(*) FROM call_participants WHERE call_id = ? AND status = 'joined'");
         $joined->execute([$callId]);
-        if ((int)$joined->fetchColumn() === 0 || (int)$call['created_by'] === (int)$user['id']) {
+        $joinedCount = (int)$joined->fetchColumn();
+        $invited = $pdo->prepare("SELECT COUNT(*) FROM call_participants WHERE call_id = ? AND status = 'invited'");
+        $invited->execute([$callId]);
+        $invitedCount = (int)$invited->fetchColumn();
+        if ($joinedCount === 0 || ((int)$call['created_by'] === (int)$user['id']) || ($invitedCount === 0 && $joinedCount <= 1)) {
             $pdo->prepare("UPDATE calls SET status = 'ended', ended_at = UTC_TIMESTAMP() WHERE id = ?")->execute([$callId]);
             $pdo->prepare("UPDATE call_participants SET status = 'left', left_at = UTC_TIMESTAMP() WHERE call_id = ? AND status = 'invited'")->execute([$callId]);
         }
