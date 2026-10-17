@@ -3,18 +3,20 @@ declare(strict_types=1);
 
 /**
  * TextBee SMS gateway. The API key must live only in the private server config.php
- * or PLUSCHAT_TEXTBEE_API_KEY environment variable, never in the Android app/repository.
+ * or PLUSCHAT_TEXTBEE_API_KEY environment variable. The gateway device ID is
+ * configured privately as textbee_device_id / PLUSCHAT_TEXTBEE_DEVICE_ID.
  */
 final class PCTextBeeService
 {
     public static function send(string $phone, string $message): bool
     {
         $apiKey = trim((string)(pc_config('textbee_api_key', '') ?: getenv('PLUSCHAT_TEXTBEE_API_KEY') ?: ''));
-        if ($apiKey === '' || !preg_match('/^\\+[1-9][0-9]{7,14}$/', $phone)) {
+        $deviceId = trim((string)(pc_config('textbee_device_id', '') ?: getenv('PLUSCHAT_TEXTBEE_DEVICE_ID') ?: ''));
+        if ($apiKey === '' || $deviceId === '' || !preg_match('/^\\+[1-9][0-9]{7,14}$/', $phone)) {
             return false;
         }
 
-        $payload = json_encode(['recipients' => [$phone], 'message' => $message], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        $payload = json_encode(['deviceId' => $deviceId, 'recipients' => [$phone], 'message' => $message], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         if (!is_string($payload)) return false;
         $url = 'https://api.textbee.dev/api/v1/gateway/send-sms';
 
