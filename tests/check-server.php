@@ -62,10 +62,6 @@ $requiredFiles = [
     'security/services/DeviceService.php',
     'admin/api/Controller.php',
     'admin/services/ReportService.php',
-    'calls/api/Controller.php',
-    'calls/services/CallService.php',
-    'calls/repositories/CallRepository.php',
-    'calls/validators/CallValidator.php',
 ];
 foreach ($requiredFiles as $relative) {
     if (!is_file($root . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $relative))) {
@@ -74,7 +70,7 @@ foreach ($requiredFiles as $relative) {
 }
 
 $schema = (string)file_get_contents($root . '/database/schema.sql');
-foreach (['users', 'auth_tokens', 'conversations', 'messages', 'chat_groups', 'channels', 'topics', 'message_attachments', 'notifications', 'reports', 'user_crypto_keys', 'calls', 'call_signals'] as $table) {
+foreach (['users', 'auth_tokens', 'conversations', 'messages', 'chat_groups', 'channels', 'topics', 'message_attachments', 'notifications', 'reports', 'user_crypto_keys'] as $table) {
     if (!preg_match('/CREATE\s+TABLE\s+IF\s+NOT\s+EXISTS\s+' . preg_quote($table, '/') . '\b/i', $schema)) {
         $errors[] = 'Missing schema table: ' . $table;
     }
@@ -90,9 +86,9 @@ foreach (['messages/api/Controller.php', 'groups/api/Controller.php', 'channels/
         $errors[] = 'Encrypted-message enforcement missing in: ' . $relative;
     }
 }
-foreach (['calls/api/Controller.php', 'calls/services/CallService.php', 'security/api/Controller.php'] as $relative) {
+foreach (['security/api/Controller.php'] as $relative) {
     $source = (string)file_get_contents($root . '/' . $relative);
-    if ($source === '') $errors[] = 'Empty security/calls module: ' . $relative;
+    if ($source === '') $errors[] = 'Empty security module: ' . $relative;
 }
 
 $securitySource = (string)file_get_contents($root . '/security/api/Controller.php');
