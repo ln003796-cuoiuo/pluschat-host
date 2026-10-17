@@ -9,7 +9,7 @@ function pc_call_participant(int $callId, int $userId): array
 {
     $stmt = pc_db()->prepare(
         'SELECT c.id, c.conversation_id, c.created_by, c.call_type, c.status, c.expires_at,
-                p.status AS participant_status
+                (c.expires_at > UTC_TIMESTAMP()) AS not_expired, p.status AS participant_status
          FROM calls c JOIN call_participants p ON p.call_id = c.id
          WHERE c.id = ? AND p.user_id = ? LIMIT 1'
     );
@@ -116,14 +116,14 @@ function pc_calls_dispatch(string $path, string $method): bool
 
     if ($action === 'join' && $method === 'POST') {
         pc_rate_limit('call-join', 30, 900);
-        if ($call['status'] === 'ended' || strtotime((string)$call['expires_at']) <= time()) {
+        if ($call['status'] === 'ended' || empty($call['not_expired'])) {
             pc_json(410, ['ok' => false, 'error' => 'call_expired']);
         }
         $pdo->prepare(
             "UPDATE call_participants SET status = 'joined', joined_at = COALESCE(joined_at, UTC_TIMESTAMP()), left_at = NULL
              WHERE call_id = ? AND user_id = ?"
         )->execute([$callId, $user['id']]);
-        $pdo->prepare("UPDATE calls SET status = 'active' WHERE id = ? AND status = 'ringing'")->execute([$callId]);
+        $pdo->prepare("UPDATE calls SET status = 'active', expires_at = DATE_ADD(UTC_TIMESTAMP(), INTERVAL 4 HOUR) WHERE id = ? AND status = 'ringing'")->execute([$callId]);
         pc_json(200, ['ok' => true, 'joined' => true]);
     }
 
@@ -132,12 +132,11 @@ function pc_calls_dispatch(string $path, string $method): bool
             "UPDATE call_participants SET status = 'declined', left_at = UTC_TIMESTAMP()
              WHERE call_id = ? AND user_id = ?"
         )->execute([$callId, $user['id']]);
-        $remaining = $pdo->prepare(
-            "SELECT COUNT(*) FROM call_participants WHERE call_id = ? AND status IN ('invited','joined')"
-        );
-        $remaining->execute([$callId]);
-        if ((int)$remaining->fetchColumn() <= 1) {
+        $joined = $pdo->prepare("SELECT COUNT(*) FROM call_participants WHERE call_id = ? AND status = 'joined'");
+        $joined->execute([$callId]);
+        if ((int)$joined->fetchColumn() === 0 || (int)$call['created_by'] === (int)$user['id']) {
             $pdo->prepare("UPDATE calls SET status = 'ended', ended_at = UTC_TIMESTAMP() WHERE id = ?")->execute([$callId]);
+            $pdo->prepare("UPDATE call_participants SET status = 'left', left_at = UTC_TIMESTAMP() WHERE call_id = ? AND status = 'invited'")->execute([$callId]);
         }
         pc_json(200, ['ok' => true, 'declined' => true]);
     }
@@ -145,7 +144,7 @@ function pc_calls_dispatch(string $path, string $method): bool
     if ($action === 'signal' && $method === 'POST') {
         pc_rate_limit('call-signal', 180, 900);
         if (!in_array($call['status'], ['ringing', 'active'], true)
-            || strtotime((string)$call['expires_at']) <= time()) {
+            || empty($call['not_expired'])) {
             pc_json(410, ['ok' => false, 'error' => 'call_expired']);
         }
         $data = pc_input();
