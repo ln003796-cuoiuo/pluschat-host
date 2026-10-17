@@ -58,3 +58,12 @@ Run `php database/migrate.php` using PHP CLI from the project root after `config
 
 ## Maintenance
 - `php database/cleanup.php` removes expired stories, password-reset tokens, email-verification tokens, expired access tokens, and old rate-limit buckets. It refuses web requests. Run it daily using the hosting scheduler if available; story visibility already filters expired stories even before cleanup.
+
+
+## Voice and video calls on the main host
+- `POST /api/v1/calls` with `{conversation_id, type:"audio"|"video"}` creates an authenticated call for conversation members (2–8 participants).
+- `GET /api/v1/calls/active?conversation_id=...` checks for an active/ringing call; `GET /api/v1/calls/{id}` returns its state and participants.
+- `POST /api/v1/calls/{id}/join`, `/decline`, and `/end` update call state.
+- `POST /api/v1/calls/{id}/signal` accepts bounded `offer`, `answer`, or `ice` payloads only between participants. `GET /api/v1/calls/{id}/signals?after=0` polls new records. Signaling records expire after 10 minutes.
+- Signaling uses the same PHP API and MySQL database. WebRTC media is intended to flow peer-to-peer and is not uploaded to PHP. TURN relay and complete Android calling UI still need integration and live testing; do not treat calls as production-ready yet.
+- Fresh installs include the call tables in `database/schema.sql`; existing installations apply `database/migrations/009_calls_signaling.sql` through the setup page or CLI migration runner.
