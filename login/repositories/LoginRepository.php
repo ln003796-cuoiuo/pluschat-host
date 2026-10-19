@@ -11,7 +11,7 @@ final class PCLoginRepository
         return $user ?: null;
     }
 
-    public static function issueToken(PDO $pdo, array $user, array $input): array
+    public static function issueToken(PDO $pdo, array $user, array $input, int $ttlSeconds = 2592000): array
     {
         $token = bin2hex(random_bytes(32));
         $ttlSeconds = max(60, min(2592000, $ttlSeconds));
