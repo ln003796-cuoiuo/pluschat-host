@@ -20,7 +20,7 @@ function pc_db(): PDO {
         return $pdo;
     }
     $host = (string) pc_config('db_host', 'localhost');
-    $name = (string) pc_config('db_name', 'pluschat');
+    $name = (string) pc_config('db_name', 'Pluschat');
     $user = (string) pc_config('db_user', 'admin');
     $password = (string) pc_config('db_password', '');
     if ($password === '') {
