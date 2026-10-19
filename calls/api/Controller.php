@@ -32,28 +32,44 @@ function pc_calls_dispatch(string $path, string $method): bool
         }
 
         $pdo = pc_db();
-        $member = $pdo->prepare('SELECT 1 FROM conversation_members WHERE conversation_id = ? AND user_id = ?');
-        $member->execute([$conversationId, $user['id']]);
-        if (!$member->fetchColumn()) pc_json(403, ['ok' => false, 'error' => 'conversation_access_denied']);
-
-        $members = $pdo->prepare(
-            'SELECT user_id FROM conversation_members WHERE conversation_id = ? ORDER BY user_id LIMIT 9'
-        );
-        $members->execute([$conversationId]);
-        $memberIds = array_map('intval', array_column($members->fetchAll(), 'user_id'));
-        if (count($memberIds) < 2 || count($memberIds) > 8) {
-            pc_json(422, ['ok' => false, 'error' => 'call_participant_count_unsupported', 'max_participants' => 8]);
-        }
-
-        $active = $pdo->prepare(
-            "SELECT id FROM calls WHERE conversation_id = ? AND status IN ('ringing','active')
-             AND expires_at > UTC_TIMESTAMP() ORDER BY id DESC LIMIT 1"
-        );
-        $active->execute([$conversationId]);
-        if ($active->fetchColumn()) pc_json(409, ['ok' => false, 'error' => 'call_already_active']);
-
         $pdo->beginTransaction();
         try {
+            // Serialize call creation per conversation so concurrent requests cannot
+            // create two active calls for the same conversation.
+            $conversation = $pdo->prepare('SELECT id FROM conversations WHERE id = ? FOR UPDATE');
+            $conversation->execute([$conversationId]);
+            if (!$conversation->fetchColumn()) {
+                $pdo->rollBack();
+                pc_json(404, ['ok' => false, 'error' => 'conversation_not_found']);
+            }
+
+            $member = $pdo->prepare('SELECT 1 FROM conversation_members WHERE conversation_id = ? AND user_id = ?');
+            $member->execute([$conversationId, $user['id']]);
+            if (!$member->fetchColumn()) {
+                $pdo->rollBack();
+                pc_json(403, ['ok' => false, 'error' => 'conversation_access_denied']);
+            }
+
+            $members = $pdo->prepare(
+                'SELECT user_id FROM conversation_members WHERE conversation_id = ? ORDER BY user_id LIMIT 9 FOR UPDATE'
+            );
+            $members->execute([$conversationId]);
+            $memberIds = array_map('intval', array_column($members->fetchAll(), 'user_id'));
+            if (count($memberIds) < 2 || count($memberIds) > 8) {
+                $pdo->rollBack();
+                pc_json(422, ['ok' => false, 'error' => 'call_participant_count_unsupported', 'max_participants' => 8]);
+            }
+
+            $active = $pdo->prepare(
+                "SELECT id FROM calls WHERE conversation_id = ? AND status IN ('ringing','active')
+                 AND expires_at > UTC_TIMESTAMP() ORDER BY id DESC LIMIT 1"
+            );
+            $active->execute([$conversationId]);
+            if ($active->fetchColumn()) {
+                $pdo->rollBack();
+                pc_json(409, ['ok' => false, 'error' => 'call_already_active']);
+            }
+
             $pdo->prepare(
                 "INSERT INTO calls (conversation_id, created_by, call_type, status, expires_at)
                  VALUES (?, ?, ?, 'ringing', DATE_ADD(UTC_TIMESTAMP(), INTERVAL 90 SECOND))"
