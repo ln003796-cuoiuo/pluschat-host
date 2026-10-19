@@ -65,7 +65,7 @@ function pc_require_verified_user(): array {
         pc_json(403, [
             'ok' => false,
             'error' => 'profile_completion_required',
-            'message' => 'Подтверди email и телефон, включи 2FA и выбери ник в настройке профиля.',
+            'message' => 'Подтверди email и телефон, затем выбери ник и заверши профиль.',
         ]);
     }
     return $user;
