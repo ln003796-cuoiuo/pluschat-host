@@ -101,7 +101,7 @@ final class PCRegistrationRepository
 
     public static function unverifiedByEmail(PDO $pdo, string $email): ?array
     {
-        $stmt = $pdo->prepare('SELECT id, email, username, email_verified_at FROM users WHERE email = ? LIMIT 1');
+        $stmt = $pdo->prepare('SELECT id, email, username, first_name, email_verified_at FROM users WHERE email = ? LIMIT 1');
         $stmt->execute([$email]);
         $user = $stmt->fetch();
         return $user ?: null;
