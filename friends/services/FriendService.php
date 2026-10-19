@@ -21,7 +21,7 @@ final class PCFriendService
         $targetId = filter_var($target, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
         if (!$targetId || $targetId === $userId) return ['status' => 422, 'body' => ['ok' => false, 'error' => 'invalid_target_user']];
         $pdo = pc_db();
-        $stmt = $pdo->prepare('SELECT id FROM users WHERE id = ? AND email_verified_at IS NOT NULL');
+        $stmt = $pdo->prepare('SELECT id FROM users WHERE id = ? AND email_verified_at IS NOT NULL AND phone_verified_at IS NOT NULL AND LEFT(username, 11) <> 'pc_pending_'');
         $stmt->execute([$targetId]);
         if (!$stmt->fetchColumn()) return ['status' => 404, 'body' => ['ok' => false, 'error' => 'user_not_found']];
         $stmt = $pdo->prepare('SELECT 1 FROM user_blocks WHERE (user_id = ? AND blocked_user_id = ?) OR (user_id = ? AND blocked_user_id = ?) LIMIT 1');
