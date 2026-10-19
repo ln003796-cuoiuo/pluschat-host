@@ -79,13 +79,13 @@ $loginService = (string)file_get_contents($root . '/login/services/LoginService.
 if (!str_contains($loginService, "'error' => 'phone_required'") || !str_contains($loginService, "'error' => 'phone_not_verified'")) $errors[] = 'Login must require a phone number and SMS verification';
 $bootstrapAuth = (string)file_get_contents($root . '/bootstrap.php');
 if (!str_contains($bootstrapAuth, 'AND u.phone IS NOT NULL AND u.phone_verified_at IS NOT NULL')) $errors[] = 'Bearer API authentication must require verified phone number';
-if (!str_contains($loginService, 'requires_2fa_setup') || !str_contains($loginService, 'requires_2fa')) $errors[] = 'Mandatory 2FA login flow is missing';
+if (!str_contains($loginService, 'requires_2fa') || str_contains($loginService, 'requires_2fa_setup')) $errors[] = '2FA must be optional unless a user has enabled it';
 $securityController = (string)file_get_contents($root . '/security/api/Controller.php');
-foreach (['/api/v1/auth/2fa/setup','/api/v1/auth/2fa/confirm','/api/v1/auth/2fa/verify','two_factor_is_mandatory'] as $route) {
+foreach (['/api/v1/auth/2fa/setup','/api/v1/auth/2fa/confirm','/api/v1/auth/2fa/verify','/api/v1/auth/2fa/disable','verifyCurrentCode'] as $route) {
     if (!str_contains($securityController, $route)) $errors[] = '2FA route missing: ' . $route;
 }
 $bootstrap = (string)file_get_contents($root . '/bootstrap.php');
-if (!str_contains($bootstrap, 'two_factor_setup_required')) $errors[] = 'Authenticated API does not enforce mandatory 2FA enrollment';
+if (str_contains($bootstrap, 'two_factor_setup_required')) $errors[] = 'API must not require optional 2FA enrollment';
 
 $registrationController = (string)file_get_contents($root . '/register/api/Controller.php');
 if (!str_contains($registrationController, 'confirmCode')) $errors[] = 'Email code verification route is missing';
