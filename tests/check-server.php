@@ -81,6 +81,14 @@ $bootstrap = (string)file_get_contents($root . '/bootstrap.php');
 if (!str_contains($bootstrap, 'function pc_encrypted_envelope')) {
     $errors[] = 'Missing encrypted-envelope validation';
 }
+$callSource = (string)file_get_contents($root . '/calls/api/Controller.php');
+if (!str_contains($callSource, 'SELECT id FROM conversations WHERE id = ? FOR UPDATE')) {
+    $errors[] = 'Call creation must serialize per conversation';
+}
+$cleanupSource = (string)file_get_contents($root . '/database/cleanup.php');
+foreach (['phone_verification_codes', 'two_factor_challenges', 'call_signals'] as $expiredTable) {
+    if (!str_contains($cleanupSource, $expiredTable)) $errors[] = 'Cleanup missing expired records: ' . $expiredTable;
+}
 foreach (['messages/api/Controller.php', 'groups/api/Controller.php', 'channels/api/Controller.php', 'topics/validators/TopicValidator.php'] as $relative) {
     $source = (string)file_get_contents($root . '/' . $relative);
     if (!str_contains($source, 'pc_encrypted_envelope')) {
