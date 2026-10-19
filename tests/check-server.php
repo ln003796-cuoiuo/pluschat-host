@@ -100,6 +100,9 @@ $entrySource = (string)file_get_contents($root . '/public/index.php');
 if (!str_contains($entrySource, "'schema' => 'ready'") || !str_contains($entrySource, "'schema' => 'incomplete'")) {
     $errors[] = 'Health endpoint must distinguish a ready schema from an incomplete schema';
 }
+if (!str_contains($entrySource, "'sms_provider' => \$textbeeConfigured ? 'configured' : 'not_configured'")) {
+    $errors[] = 'Health endpoint must expose only a safe TextBee configuration status';
+}
 
 $rateLimitedWrites = [
     'messages/api/Controller.php' => 'message-send',
