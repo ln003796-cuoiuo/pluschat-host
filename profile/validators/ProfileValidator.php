@@ -6,6 +6,14 @@ final class PCProfileValidator
     public static function validate(array $data): array
     {
         $updates = [];
+        if (array_key_exists('username', $data)) {
+            $username = is_string($data['username']) ? trim($data['username']) : '';
+            if (!preg_match('/^[A-Za-z0-9_]{3,32}$/', $username) || str_starts_with(strtolower($username), 'pc_pending_')) {
+                return ['error' => 'invalid_username'];
+            }
+            $updates['username'] = $username;
+        }
+
         foreach (['first_name' => 80, 'last_name' => 80] as $field => $limit) {
             if (!array_key_exists($field, $data)) continue;
             if (!is_string($data[$field]) || pc_len(trim($data[$field])) > $limit) {
