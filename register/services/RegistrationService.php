@@ -16,18 +16,24 @@ final class PCRegistrationService
         }
 
         $pdo = pc_db();
+        if ($user['username'] === '') {
+            // The DB requires a unique username, but the user chooses their public nickname
+            // only after confirming email. This reserved internal value is never exposed.
+            $user['username'] = 'pc_pending_' . bin2hex(random_bytes(8));
+        }
         if (PCRegistrationRepository::isTaken($pdo, $user['email'], $user['username'], $user['phone'])) {
             return ['status' => 409, 'body' => ['ok' => false, 'error' => 'email_username_or_phone_taken', 'message' => 'Email, имя пользователя или номер уже используется.']];
         }
 
         $codes = PCRegistrationRepository::create($pdo, $user);
-        $emailSent = PCVerificationMailer::send($user['email'], $user['username'], $codes['email_code']);
+        $emailSent = PCVerificationMailer::send($user['email'], $user['first_name'], $codes['email_code']);
         $smsSent = PCTextBeeService::send($user['phone'], 'Код подтверждения Pluschat: ' . $codes['phone_code'] . '. Действует 10 минут. Никому не сообщайте этот код.');
         return [
             'status' => 201,
             'body' => [
                 'ok' => true,
                 'registered' => true,
+                'profile_completion_required' => str_starts_with($user['username'], 'pc_pending_'),
                 'email_verification_sent' => $emailSent,
                 'phone_verification_sent' => $smsSent,
                 'message' => $smsSent
