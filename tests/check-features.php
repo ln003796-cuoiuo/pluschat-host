@@ -55,6 +55,13 @@ $textBee = (string)file_get_contents($root . '/register/services/TextBeeService.
 if (!str_contains($textBee, 'PLUSCHAT_TEXTBEE_API_KEY') || !str_contains($textBee, 'x-api-key')) $errors[] = 'TextBee must read its key privately and authenticate SMS requests';
 if (!str_contains($textBee, 'PLUSCHAT_TEXTBEE_DEVICE_ID') || !str_contains($textBee, "'deviceId' => \$deviceId")) $errors[] = 'TextBee request must include the configured gateway device ID';
 $registrationValidator = (string)file_get_contents($root . '/register/validators/RegistrationValidator.php');
+$registrationService = (string)file_get_contents($root . '/register/services/RegistrationService.php');
+$profileValidator = (string)file_get_contents($root . '/profile/validators/ProfileValidator.php');
+$profileService = (string)file_get_contents($root . '/profile/services/ProfileService.php');
+if (!str_contains($registrationService, 'pc_pending_') || !str_contains($profileValidator, "updates['username']")) $errors[] = 'Nickname must be assigned during profile completion, not registration';
+if (!str_contains($profileService, 'username_taken') || !str_contains($profileService, 'username_required')) $errors[] = 'Profile completion must require a unique public nickname';
+$entryProfile = (string)file_get_contents($root . '/public/index.php');
+if (!str_contains($entryProfile, 'profile_completion_required') || !str_contains($entryProfile, "'profile_completed' => \$profileCompleted")) $errors[] = 'Incomplete profiles must be blocked from feature APIs and hidden in public user data';
 if (!str_contains($registrationValidator, 'invalid_phone')) $errors[] = 'Registration must validate phone number';
 if (!str_contains($registrationValidator, 'first_name_required')) $errors[] = 'Registration must require first name';
 $registrationRepository = (string)file_get_contents($root . '/register/repositories/RegistrationRepository.php');
