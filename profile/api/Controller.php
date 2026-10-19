@@ -31,7 +31,8 @@ function pc_profile_dispatch(string $path, string $method): bool
         exit;
     }
     if ($path === '/api/v1/auth/profile' && $method === 'POST') {
-        $user = pc_require_verified_user();
+        // Profile completion is the one authenticated route allowed before a public nickname exists.
+        $user = pc_token_user();
         $result = PCProfileService::update((int)$user['id'], pc_input());
         pc_json($result['status'], $result['body']);
     }
