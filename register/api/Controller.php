@@ -44,7 +44,7 @@ function pc_register_dispatch(string $path, string $method): bool
         $user = PCRegistrationRepository::unverifiedByEmail($pdo, $email);
         if ($user && empty($user['email_verified_at'])) {
             $token = PCRegistrationRepository::replaceVerificationToken($pdo, (int)$user['id']);
-            PCVerificationMailer::send($email, (string)$user['username'], $token);
+            PCVerificationMailer::send($email, (string)$user['first_name'], $token);
         }
         pc_json(200, ['ok' => true, 'message' => 'Если аккаунт существует и ещё не подтверждён, письмо будет отправлено.']);
     }
