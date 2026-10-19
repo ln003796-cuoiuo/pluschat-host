@@ -7,7 +7,8 @@ final class PCRegistrationValidator
     {
         $email = strtolower(is_string($data['email'] ?? null) ? trim($data['email']) : '');
         $phone = is_string($data['phone'] ?? null) ? preg_replace('/[\\s().-]+/', '', trim($data['phone'])) : '';
-        $username = is_string($data['username'] ?? null) ? trim($data['username']) : '';
+        // Public nickname is assigned only after email verification in profile completion.
+        $username = '';
         $password = is_string($data['password'] ?? null) ? $data['password'] : '';
         $firstName = is_string($data['first_name'] ?? null) ? trim($data['first_name']) : '';
         $lastName = is_string($data['last_name'] ?? null) ? trim($data['last_name']) : '';
@@ -18,9 +19,6 @@ final class PCRegistrationValidator
         }
         if (!is_string($phone) || !preg_match('/^\\+[1-9][0-9]{7,14}$/', $phone)) {
             return ['error' => 'invalid_phone', 'message' => 'Укажи номер в международном формате, например +491234567890.'];
-        }
-        if ($username !== '' && (!preg_match('/^[A-Za-z0-9_]{3,32}$/', $username) || str_starts_with(strtolower($username), 'pc_pending_'))) {
-            return ['error' => 'invalid_username', 'message' => 'Ник задаётся после подтверждения email: 3–32 символа, латинские буквы, цифры и _.'];
         }
         if (strlen($password) < 10 || strlen($password) > 200) {
             return ['error' => 'invalid_password', 'message' => 'Пароль должен содержать от 10 до 200 символов.'];
