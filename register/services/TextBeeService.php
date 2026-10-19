@@ -50,10 +50,23 @@ final class PCTextBeeService
             }
         }
 
-        if (!is_string($raw) || $status !== 200) return false;
+        if (!is_string($raw) || $status !== 200) {
+            // Log only provider status and a short machine-readable error; never log keys,
+            // SMS codes, phone numbers, request bodies or raw provider responses.
+            $provider = is_string($raw) ? json_decode($raw, true) : null;
+            $providerError = is_array($provider) && is_string($provider['error'] ?? null)
+                ? preg_replace('/[^A-Za-z0-9_. -]/', '', substr($provider['error'], 0, 80))
+                : 'no_provider_error';
+            error_log('[Pluschat TextBee] SMS request failed; HTTP ' . $status . '; reason=' . ($providerError ?: 'unknown'));
+            return false;
+        }
         $decoded = json_decode($raw, true);
-        return is_array($decoded) && (($decoded['data']['success'] ?? false) === true
+        $accepted = is_array($decoded) && (($decoded['data']['success'] ?? false) === true
             || isset($decoded['data']['smsBatchId'])
             || (int)($decoded['data']['successCount'] ?? 0) > 0);
+        if (!$accepted) {
+            error_log('[Pluschat TextBee] HTTP 200 returned an unrecognized SMS response.');
+        }
+        return $accepted;
     }
 }
