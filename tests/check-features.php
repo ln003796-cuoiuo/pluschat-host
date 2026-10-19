@@ -50,6 +50,8 @@ foreach (['pc_friends_dispatch','pc_saved_dispatch','pc_polls_dispatch','pc_chat
     if (strpos($index, $route) === false) $errors[] = 'Router missing: ' . $route;
 }
 $setup = (string)file_get_contents($root . '/public/setup.php');
+if (!str_contains($setup, "\$name = 'Pluschat'") || !str_contains($setup, "foreach (['admin', 'Admin']")) $errors[] = 'Installer must use the Pluschat database and admin account first';
+if (!str_contains($setup, '6ad27e0e10b63ade60583c87')) $errors[] = 'Installer must include the configured TextBee device ID without a public API key';
 if (!str_contains($setup, 'database/migrations/*.sql') || !str_contains($setup, 'phone_verification_codes') || !str_contains($setup, 'textbee_device_id')) $errors[] = 'Installer must apply all migrations and keep TextBee settings private';
 $textBee = (string)file_get_contents($root . '/register/services/TextBeeService.php');
 if (!str_contains($textBee, 'PLUSCHAT_TEXTBEE_API_KEY') || !str_contains($textBee, 'x-api-key')) $errors[] = 'TextBee must read its key privately and authenticate SMS requests';
