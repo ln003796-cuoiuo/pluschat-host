@@ -1,9 +1,7 @@
 name: PHP server checks
 
+# Manual only: pushes and pull requests must not start GitHub Actions.
 on:
-  push:
-    branches: [main]
-  pull_request:
   workflow_dispatch:
 
 permissions:
