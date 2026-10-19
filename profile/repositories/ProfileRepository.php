@@ -8,7 +8,7 @@ final class PCProfileRepository
         $sets = [];
         $values = [];
         foreach ($updates as $field => $value) {
-            if (!in_array($field, ['first_name', 'last_name', 'birth_date'], true)) {
+            if (!in_array($field, ['username', 'first_name', 'last_name', 'birth_date'], true)) {
                 throw new InvalidArgumentException('Unsupported profile field.');
             }
             if ($field === 'birth_date' && $value === null) {
@@ -20,7 +20,7 @@ final class PCProfileRepository
         }
         $values[] = $userId;
         $pdo->prepare('UPDATE users SET ' . implode(', ', $sets) . ' WHERE id = ?')->execute($values);
-        $stmt = $pdo->prepare('SELECT id, email, username, first_name, last_name, birth_date, email_verified_at, created_at FROM users WHERE id = ?');
+        $stmt = $pdo->prepare('SELECT id, email, phone, username, first_name, last_name, birth_date, email_verified_at, phone_verified_at, created_at FROM users WHERE id = ?');
         $stmt->execute([$userId]);
         $user = $stmt->fetch();
         if (!$user) throw new RuntimeException('User disappeared during profile update.');
