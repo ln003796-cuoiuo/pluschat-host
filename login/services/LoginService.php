@@ -43,18 +43,18 @@ final class PCLoginService
             ];
         }
 
-        // A restricted setup token is issued for first-time mandatory 2FA enrollment.
-        $issued = PCLoginRepository::issueToken($pdo, $user, $input, 900);
+        // 2FA is optional. If enabled, the branch above requires a TOTP challenge;
+        // otherwise issue a regular session after email and SMS verification.
+        $issued = PCLoginRepository::issueToken($pdo, $user, $input);
         return [
             'status' => 200,
             'body' => [
                 'ok' => true,
-                'requires_2fa_setup' => true,
+                'requires_2fa' => false,
                 'token' => $issued['token'],
                 'token_type' => 'Bearer',
                 'expires_at' => $issued['expires_at'],
                 'user' => pc_public_user($user),
-                'message' => 'Перед использованием Pluschat необходимо включить двухэтапную аутентификацию.',
             ],
         ];
     }
