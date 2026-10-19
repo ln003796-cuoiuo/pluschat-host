@@ -5,7 +5,7 @@ final class PCFriendRepository
 {
     public static function friends(PDO $pdo, int $userId): array
     {
-        $stmt = $pdo->prepare('SELECT u.id, u.username, u.first_name, u.last_name FROM friendships f JOIN users u ON u.id = f.friend_id WHERE f.user_id = ? AND u.email_verified_at IS NOT NULL ORDER BY u.username LIMIT 500');
+        $stmt = $pdo->prepare('SELECT u.id, u.username, u.first_name, u.last_name FROM friendships f JOIN users u ON u.id = f.friend_id WHERE f.user_id = ? AND u.email_verified_at IS NOT NULL AND u.phone_verified_at IS NOT NULL AND LEFT(u.username, 11) <> 'pc_pending_' ORDER BY u.username LIMIT 500');
         $stmt->execute([$userId]);
         return array_map(static fn(array $r): array => [
             'id' => (string)$r['id'], 'username' => $r['username'],
