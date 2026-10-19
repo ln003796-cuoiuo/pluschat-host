@@ -8,7 +8,7 @@ declare(strict_types=1);
 return [
     'db_host' => 'localhost',
     'db_name' => 'pluschat',
-    'db_user' => 'admin',
+    'db_user' => 'Admin',
     'db_password' => '',
     'mail_from' => 'register@плюсчат.рф',
     // Configure privately on the host; never commit real credentials.
@@ -17,6 +17,5 @@ return [
     'app_base_url' => 'https://xn--80avljg2a1c.xn--p1ai',
     'allowed_origins' => [
         'https://xn--80avljg2a1c.xn--p1ai',
-        'https://xn--n1aabel.xn--80avljg2a1c.xn--p1ai',
     ],
 ];
