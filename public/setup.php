@@ -44,18 +44,39 @@ if (!$alreadyConfigured && ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
         try {
             $host = 'localhost';
             $name = 'pluschat';
-            $user = 'admin';
 
-            $pdo = new PDO(
-                "mysql:host={$host};dbname={$name};charset=utf8mb4",
-                $user,
-                $password,
-                [
-                    PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-                    PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-                    PDO::ATTR_EMULATE_PREPARES => false,
-                ]
-            );
+            // Hosting control panels may preserve MySQL account-name case.
+            // Try the user's documented account name first, then the common
+            // lowercase variant. The owner still enters only the DB password.
+            $pdo = null;
+            $lastConnectionError = null;
+            $user = '';
+            foreach (['Admin', 'admin'] as $candidateUser) {
+                try {
+                    $candidatePdo = new PDO(
+                        "mysql:host={$host};dbname={$name};charset=utf8mb4",
+                        $candidateUser,
+                        $password,
+                        [
+                            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+                            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+                            PDO::ATTR_EMULATE_PREPARES => false,
+                        ]
+                    );
+                    $pdo = $candidatePdo;
+                    $user = $candidateUser;
+                    break;
+                } catch (PDOException $connectionError) {
+                    $lastConnectionError = $connectionError;
+                }
+            }
+            if (!$pdo instanceof PDO) {
+                throw new RuntimeException(
+                    'Не удалось подключиться к базе pluschat под Admin/admin. Проверь пароль и права пользователя БД.',
+                    0,
+                    $lastConnectionError
+                );
+            }
 
             $schemaPath = dirname(__DIR__) . '/database/schema.sql';
             $schema = is_file($schemaPath) ? file_get_contents($schemaPath) : false;
@@ -123,7 +144,6 @@ if (!$alreadyConfigured && ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
                 'app_base_url' => 'https://xn--80avljg2a1c.xn--p1ai',
                 'allowed_origins' => [
                     'https://xn--80avljg2a1c.xn--p1ai',
-                    'https://xn--n1aabel.xn--80avljg2a1c.xn--p1ai',
                 ],
             ];
 
