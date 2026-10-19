@@ -46,8 +46,42 @@ function pc_security_dispatch(string $path, string $method): bool
     }
 
     if ($path === '/api/v1/auth/2fa/disable' && $method === 'POST') {
-        pc_require_verified_user();
-        pc_json(403, ['ok' => false, 'error' => 'two_factor_is_mandatory', 'message' => 'Двухэтапная аутентификация обязательна для Pluschat.']);
+        $user = pc_require_verified_user();
+        pc_rate_limit('two-factor-disable', 5, 900);
+        $data = pc_input();
+        $password = pc_string($data, 'password');
+        $code = pc_string($data, 'code');
+        if ($password === '' || !preg_match('/^[0-9]{6}$/', $code)) {
+            pc_json(422, ['ok' => false, 'error' => 'password_and_current_code_required']);
+        }
+        $pdo = pc_db();
+        $stmt = $pdo->prepare('SELECT password_hash FROM users WHERE id = ? LIMIT 1');
+        $stmt->execute([(int)$user['id']]);
+        $passwordHash = $stmt->fetchColumn();
+        if (!is_string($passwordHash) || !password_verify($password, $passwordHash)) {
+            pc_json(403, ['ok' => false, 'error' => 'invalid_password']);
+        }
+        if (!PCTwoFactorService::isEnabled($pdo, (int)$user['id'])
+            || !PCTwoFactorService::verifyCurrentCode($pdo, (int)$user['id'], $code)) {
+            pc_json(403, ['ok' => false, 'error' => 'invalid_two_factor_code']);
+        }
+        $header = $_SERVER['HTTP_AUTHORIZATION'] ?? '';
+        if (!preg_match('/^Bearer\\s+([a-f0-9]{64})$/i', $header, $matches)) {
+            pc_json(401, ['ok' => false, 'error' => 'authentication_required']);
+        }
+        $currentTokenHash = hash('sha256', $matches[1]);
+        $pdo->beginTransaction();
+        try {
+            $pdo->prepare('DELETE FROM user_two_factor WHERE user_id = ?')->execute([(int)$user['id']]);
+            $pdo->prepare('DELETE FROM two_factor_setups WHERE user_id = ?')->execute([(int)$user['id']]);
+            $pdo->prepare('DELETE FROM two_factor_challenges WHERE user_id = ?')->execute([(int)$user['id']]);
+            $pdo->prepare('DELETE FROM auth_tokens WHERE user_id = ? AND token_hash <> ?')->execute([(int)$user['id'], $currentTokenHash]);
+            $pdo->commit();
+        } catch (Throwable $e) {
+            if ($pdo->inTransaction()) $pdo->rollBack();
+            throw $e;
+        }
+        pc_json(200, ['ok' => true, 'enabled' => false, 'message' => 'Двухэтапная аутентификация отключена. Остальные сеансы завершены.']);
     }
 
     if ($path === '/api/v1/security/keys' && $method === 'POST') {
