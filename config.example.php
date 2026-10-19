@@ -7,8 +7,8 @@ declare(strict_types=1);
  */
 return [
     'db_host' => 'localhost',
-    'db_name' => 'pluschat',
-    'db_user' => 'Admin',
+    'db_name' => 'Pluschat',
+    'db_user' => 'admin',
     'db_password' => '',
     'mail_from' => 'register@плюсчат.рф',
     // Configure privately on the host; never commit real credentials.
