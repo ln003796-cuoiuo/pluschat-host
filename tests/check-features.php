@@ -69,6 +69,9 @@ if (!str_contains($profileController, '/api/v1/me/avatar')) $errors[] = 'Avatar 
 $twoFactorService = (string)file_get_contents($root . '/security/services/TwoFactorService.php');
 if (!str_contains($twoFactorService, 'sodium_crypto_secretbox') || !str_contains($twoFactorService, 'verifyCode')) $errors[] = 'Encrypted TOTP secret storage or TOTP validation is missing';
 $loginService = (string)file_get_contents($root . '/login/services/LoginService.php');
+if (!str_contains($loginService, "'error' => 'phone_required'") || !str_contains($loginService, "'error' => 'phone_not_verified'")) $errors[] = 'Login must require a phone number and SMS verification';
+$bootstrapAuth = (string)file_get_contents($root . '/bootstrap.php');
+if (!str_contains($bootstrapAuth, 'AND u.phone IS NOT NULL AND u.phone_verified_at IS NOT NULL')) $errors[] = 'Bearer API authentication must require verified phone number';
 if (!str_contains($loginService, 'requires_2fa_setup') || !str_contains($loginService, 'requires_2fa')) $errors[] = 'Mandatory 2FA login flow is missing';
 $securityController = (string)file_get_contents($root . '/security/api/Controller.php');
 foreach (['/api/v1/auth/2fa/setup','/api/v1/auth/2fa/confirm','/api/v1/auth/2fa/verify','two_factor_is_mandatory'] as $route) {
