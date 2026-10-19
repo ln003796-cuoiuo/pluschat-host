@@ -19,7 +19,7 @@ final class PCFriendRepository
         $sql = "SELECT fr.id, fr.requester_id, fr.created_at, u.id AS peer_id, u.username, u.first_name, u.last_name
                 FROM friend_requests fr
                 JOIN users u ON u.id = CASE WHEN fr.requester_id = ? THEN fr.recipient_id ELSE fr.requester_id END
-                WHERE $filter AND fr.status = 'pending'
+                WHERE $filter AND fr.status = 'pending' AND u.email_verified_at IS NOT NULL AND u.phone_verified_at IS NOT NULL AND LEFT(u.username, 11) <> 'pc_pending_'
                 ORDER BY fr.created_at DESC LIMIT 200";
         $stmt = $pdo->prepare($sql);
         $stmt->execute([$userId, $userId]);
