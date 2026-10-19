@@ -13,7 +13,7 @@ final class PCSearchRepository
         $like = self::like($query);
         $stmt = $pdo->prepare("SELECT u.id, u.username, u.first_name, u.last_name
             FROM users u LEFT JOIN user_settings s ON s.user_id = u.id
-            WHERE u.id <> ? AND u.email_verified_at IS NOT NULL
+            WHERE u.id <> ? AND u.email_verified_at IS NOT NULL AND LEFT(u.username, 11) <> 'pc_pending_'
               AND (u.username LIKE ? OR u.first_name LIKE ? OR u.last_name LIKE ?)
               AND COALESCE(s.profile_visibility, 'everyone') <> 'nobody'
               AND (COALESCE(s.profile_visibility, 'everyone') <> 'contacts' OR EXISTS (
