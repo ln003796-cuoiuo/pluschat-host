@@ -19,8 +19,8 @@ final class PCRegistrationValidator
         if (!is_string($phone) || !preg_match('/^\\+[1-9][0-9]{7,14}$/', $phone)) {
             return ['error' => 'invalid_phone', 'message' => 'Укажи номер в международном формате, например +491234567890.'];
         }
-        if (!preg_match('/^[A-Za-z0-9_]{3,32}$/', $username)) {
-            return ['error' => 'invalid_username', 'message' => 'Имя пользователя: 3–32 символа, латинские буквы, цифры и _.'];
+        if ($username !== '' && (!preg_match('/^[A-Za-z0-9_]{3,32}$/', $username) || str_starts_with(strtolower($username), 'pc_pending_'))) {
+            return ['error' => 'invalid_username', 'message' => 'Ник задаётся после подтверждения email: 3–32 символа, латинские буквы, цифры и _.'];
         }
         if (strlen($password) < 10 || strlen($password) > 200) {
             return ['error' => 'invalid_password', 'message' => 'Пароль должен содержать от 10 до 200 символов.'];
