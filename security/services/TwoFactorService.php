@@ -10,6 +10,16 @@ final class PCTwoFactorService
         return (bool)$stmt->fetchColumn();
     }
 
+    public static function verifyCurrentCode(PDO $pdo, int $userId, string $code): bool
+    {
+        if (!preg_match('/^[0-9]{6}$/', $code)) return false;
+        $stmt = $pdo->prepare('SELECT secret_ciphertext FROM user_two_factor WHERE user_id = ? AND enabled_at IS NOT NULL LIMIT 1');
+        $stmt->execute([$userId]);
+        $ciphertext = $stmt->fetchColumn();
+        if (!is_string($ciphertext) || $ciphertext === '') return false;
+        return self::verifyCode(self::decryptSecret($ciphertext), $code, time());
+    }
+
     public static function beginSetup(PDO $pdo, int $userId, string $label): array
     {
         $secret = self::base32Encode(random_bytes(20));
