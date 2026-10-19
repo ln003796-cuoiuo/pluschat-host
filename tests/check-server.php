@@ -29,6 +29,7 @@ $requiredFiles = [
     'public/index.php',
     'calls/api/Controller.php',
     'public/setup.php',
+    'public/update-database.php',
     'bootstrap.php',
     'database/schema.sql',
     'register/api/Controller.php',
