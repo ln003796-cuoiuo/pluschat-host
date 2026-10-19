@@ -31,6 +31,7 @@ function pc_profile_dispatch(string $path, string $method): bool
         exit;
     }
     if ($path === '/api/v1/auth/profile' && $method === 'POST') {
+        pc_rate_limit('profile-update', 20, 3600);
         // Profile completion is the one authenticated route allowed before a public nickname exists.
         $user = pc_token_user();
         $result = PCProfileService::update((int)$user['id'], pc_input());
