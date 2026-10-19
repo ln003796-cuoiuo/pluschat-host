@@ -67,3 +67,11 @@ Run `php database/migrate.php` using PHP CLI from the project root after `config
 - `POST /api/v1/calls/{id}/signal` accepts bounded `offer`, `answer`, or `ice` payloads only between participants. `GET /api/v1/calls/{id}/signals?after=0` polls new records. Signaling records expire after 10 minutes.
 - Signaling uses the same PHP API and MySQL database. WebRTC media is intended to flow peer-to-peer and is not uploaded to PHP. TURN relay and complete Android calling UI still need integration and live testing; do not treat calls as production-ready yet.
 - Fresh installs include the call tables in `database/schema.sql`; existing installations apply `database/migrations/009_calls_signaling.sql` through the setup page or CLI migration runner.
+
+
+## Mandatory phone verification via TextBee
+- Registration requires an international phone number in E.164 format. The server sends a six-digit SMS code that expires after 10 minutes; only its hash is stored.
+- `POST /api/v1/auth/phone/verify` accepts `phone` and `code`; `POST /api/v1/auth/phone/resend` rotates the code with a 60-second resend cooldown.
+- Configure `PLUSCHAT_TEXTBEE_API_KEY` and `PLUSCHAT_TEXTBEE_DEVICE_ID` as private server environment variables, or set `textbee_api_key` and `textbee_device_id` in the server-only `config.php`. Never put the API key in this public repository or the Android APK.
+- The API call uses `POST https://api.textbee.dev/api/v1/gateway/send-sms`, the `x-api-key` header, and a `deviceId` in the JSON body. Server logs record only HTTP status and a short provider error code, not credentials, phone numbers, SMS codes, or raw responses.
+- HTTP 200 means TextBee accepted/queued the SMS; it does not guarantee delivery. The paired Android device must be enabled and online with SMS permission granted.
