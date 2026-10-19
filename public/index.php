@@ -43,10 +43,13 @@ function pc_string(array $data, string $key): string {
 }
 
 function pc_public_user(array $user): array {
+    $storedUsername = (string)($user['username'] ?? '');
+    $profileCompleted = $storedUsername !== '' && !str_starts_with(strtolower($storedUsername), 'pc_pending_');
     return [
         'id' => (string)$user['id'],
         'email' => (string)$user['email'],
-        'username' => (string)$user['username'],
+        'username' => $profileCompleted ? $storedUsername : '',
+        'profile_completed' => $profileCompleted,
         'first_name' => (string)($user['first_name'] ?? ''),
         'last_name' => (string)($user['last_name'] ?? ''),
         'birth_date' => $user['birth_date'] ?? null,
@@ -57,7 +60,15 @@ function pc_public_user(array $user): array {
 }
 
 function pc_require_verified_user(): array {
-    return pc_token_user();
+    $user = pc_token_user();
+    if (str_starts_with(strtolower((string)($user['username'] ?? '')), 'pc_pending_')) {
+        pc_json(403, [
+            'ok' => false,
+            'error' => 'profile_completion_required',
+            'message' => 'Подтверди email и телефон, включи 2FA и выбери ник в настройке профиля.',
+        ]);
+    }
+    return $user;
 }
 
 try {
