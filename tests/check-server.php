@@ -101,7 +101,7 @@ foreach (['security/api/Controller.php'] as $relative) {
 }
 
 $securitySource = (string)file_get_contents($root . '/security/api/Controller.php');
-if (str_contains($securitySource, 'Bearer\\\\s+')) {
+if (str_contains($securitySource, 'Bearer\\\\\\\\s+')) {
     $errors[] = 'Security API contains an over-escaped Bearer-token regex';
 }
 $entrySource = (string)file_get_contents($root . '/public/index.php');
