@@ -43,7 +43,7 @@ if (!$alreadyConfigured && ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
     } else {
         try {
             $host = 'localhost';
-            $name = 'pluschat';
+            $name = 'Pluschat';
 
             // Hosting control panels may preserve MySQL account-name case.
             // Try the user's documented account name first, then the common
@@ -51,7 +51,7 @@ if (!$alreadyConfigured && ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
             $pdo = null;
             $lastConnectionError = null;
             $user = '';
-            foreach (['Admin', 'admin'] as $candidateUser) {
+            foreach (['admin', 'Admin'] as $candidateUser) {
                 try {
                     $candidatePdo = new PDO(
                         "mysql:host={$host};dbname={$name};charset=utf8mb4",
@@ -72,7 +72,7 @@ if (!$alreadyConfigured && ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
             }
             if (!$pdo instanceof PDO) {
                 throw new RuntimeException(
-                    'Не удалось подключиться к базе pluschat под Admin/admin. Проверь пароль и права пользователя БД.',
+                    'Не удалось подключиться к базе Pluschat под admin. Проверь пароль и права пользователя БД.',
                     0,
                     $lastConnectionError
                 );
@@ -161,7 +161,7 @@ if (!$alreadyConfigured && ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
             session_regenerate_id(true);
         } catch (Throwable $e) {
             error_log('[Pluschat setup] ' . $e->getMessage());
-            $error = 'Не удалось подключить базу или создать таблицы. Проверьте пароль и убедитесь, что база pluschat и пользователь admin созданы на хостинге.';
+            $error = 'Не удалось подключить базу или создать таблицы. Проверьте пароль и убедитесь, что база Pluschat и пользователь admin созданы на хостинге.';
         }
     }
 }
