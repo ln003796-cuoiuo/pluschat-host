@@ -102,12 +102,15 @@ try {
                 'missing_table_count' => count($missing),
             ]);
         }
+        $textbeeConfigured = trim((string)pc_config('textbee_api_key', '')) !== ''
+            && trim((string)pc_config('textbee_device_id', '')) !== '';
         pc_json(200, [
             'ok' => true,
             'service' => 'pluschat-api',
             'api_version' => 1,
             'database' => 'connected',
             'schema' => 'ready',
+            'sms_provider' => $textbeeConfigured ? 'configured' : 'not_configured',
         ]);
     }
 
