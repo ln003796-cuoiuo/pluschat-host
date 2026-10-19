@@ -1,5 +1,5 @@
 ## Registration and email verification
-- `POST /api/v1/auth/register` requires `email`, `username`, `password`, and a non-empty `first_name`; `last_name` and `birth_date` are optional.
+- `POST /api/v1/auth/register` requires `email`, `phone`, `password`, and a non-empty `first_name`; `last_name` and `birth_date` are optional. A public `username` is chosen after email confirmation during profile completion.
 - A six-digit one-time code is sent to the registered email. Codes expire after 15 minutes and are stored only as a SHA-256 hash bound to the normalized email address.
 - `POST /api/v1/auth/verify` accepts `email` and `code`. Login remains blocked until email verification succeeds.
 - `POST /api/v1/auth/resend-verification` sends a replacement code for an unverified account. Responses intentionally do not reveal whether the email belongs to an account.
@@ -75,3 +75,9 @@ Run `php database/migrate.php` using PHP CLI from the project root after `config
 - Configure `PLUSCHAT_TEXTBEE_API_KEY` and `PLUSCHAT_TEXTBEE_DEVICE_ID` as private server environment variables, or set `textbee_api_key` and `textbee_device_id` in the server-only `config.php`. Never put the API key in this public repository or the Android APK.
 - The API call uses `POST https://api.textbee.dev/api/v1/gateway/send-sms`, the `x-api-key` header, and a `deviceId` in the JSON body. Server logs record only HTTP status and a short provider error code, not credentials, phone numbers, SMS codes, or raw responses.
 - HTTP 200 means TextBee accepted/queued the SMS; it does not guarantee delivery. The paired Android device must be enabled and online with SMS permission granted.
+
+
+## Profile completion and public nickname
+- Registration creates a reserved internal username while email/phone verification and mandatory 2FA are completed. The reserved value is never returned to clients.
+- After signing in and enabling 2FA, call `POST /api/v1/auth/profile` with `username` (3–32 Latin letters, digits or underscores) and optionally `first_name`, `last_name`, or `birth_date`. The nickname must be unique; the reserved `pc_pending_` prefix is unavailable.
+- Until a nickname is set, normal authenticated feature endpoints return `403 profile_completion_required`. The profile endpoint remains available to complete the account.
