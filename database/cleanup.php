@@ -13,7 +13,6 @@ $jobs = [
     'expired stories' => 'DELETE FROM stories WHERE expires_at <= UTC_TIMESTAMP()',
     'expired password reset tokens' => 'DELETE FROM password_reset_tokens WHERE expires_at <= UTC_TIMESTAMP()',
     'expired email verification tokens' => 'DELETE FROM email_verification_tokens WHERE expires_at <= UTC_TIMESTAMP()',
-    'expired phone verification codes' => 'DELETE FROM phone_verification_codes WHERE expires_at <= UTC_TIMESTAMP()',
     'expired 2FA setup records' => 'DELETE FROM two_factor_setups WHERE expires_at <= UTC_TIMESTAMP()',
     'expired 2FA login challenges' => 'DELETE FROM two_factor_challenges WHERE expires_at <= UTC_TIMESTAMP()',
     'expired call signaling records' => 'DELETE FROM call_signals WHERE expires_at <= UTC_TIMESTAMP()',
