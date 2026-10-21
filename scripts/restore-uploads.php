@@ -5,7 +5,7 @@ declare(strict_types=1);
 if(PHP_SAPI!=='cli'){http_response_code(404);exit;}
 if(!function_exists('proc_open')){fwrite(STDERR,"proc_open unavailable.\n");exit(2);}
 $file=$argv[1]??'';$target=$argv[2]??'';$phrase=getenv('PLUSCHAT_BACKUP_PASSPHRASE')?:'';
-if($file===''||!is_file($file)||$target===''||strlen($phrase)<20||!preg_match('/^[A-Za-z0-9._-]+$/',basename($target))){fwrite(STDERR,"Usage: php scripts/restore-uploads.php BACKUP.tar.gz.gpg ISOLATED_TARGET_DIR; set passphrase env.\n");exit(2);}
+if($file===''||!is_file($file)||$target===''||strlen($phrase)<20||dirname($target)!==sys_get_temp_dir()||!str_starts_with(basename($target),'pluschat-restore-')||!preg_match('/^[A-Za-z0-9._-]+$/',basename($target))){fwrite(STDERR,"Usage: php scripts/restore-uploads.php BACKUP.tar.gz.gpg ISOLATED_TARGET_DIR; set passphrase env.\n");exit(2);}
 if(is_dir($target)&&count(array_diff(scandir($target),['.','..']))>0){fwrite(STDERR,"Target directory must be empty.\n");exit(3);}
 if(!is_dir($target)&&!mkdir($target,0700,true)&&!is_dir($target)){fwrite(STDERR,"Cannot create isolated target directory.\n");exit(3);}
 $tmp=tempnam(sys_get_temp_dir(),'pc-upload-restore-');$secret=tempnam(sys_get_temp_dir(),'pc-pass-');
