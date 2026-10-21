@@ -29,13 +29,14 @@ $required = [
     'database/migrations/005_message_hiding.sql',
     'database/migrations/006_mandatory_two_factor.sql',
     'database/migrations/007_private_profile_avatars.sql',
-    'database/migrations/008_textbee_phone_verification.sql',
-    'register/services/TextBeeService.php',
     'security/services/TwoFactorService.php',
     'profile/services/AvatarService.php',
     'public/password-reset.php',
     'database/migrate.php',
     'database/cleanup.php',
+    'database/backup.php',
+    'database/restore.php',
+    'database/migrations/010_encrypted_media_keys_backups.sql',
 ];
 $errors = [];
 foreach ($required as $file) {
