@@ -44,7 +44,7 @@ if (!$alreadyConfigured && ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
     } else {
         try {
             $host = 'localhost';
-            $name = 'Pluschat';
+            $name = 'pluschat';
 
             // Hosting control panels may preserve MySQL account-name case.
             // Try the user's documented account name first, then the common
@@ -52,7 +52,7 @@ if (!$alreadyConfigured && ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
             $pdo = null;
             $lastConnectionError = null;
             $user = '';
-            foreach (['admin', 'Admin'] as $candidateUser) {
+            foreach (['Admin', 'admin'] as $candidateUser) {
                 try {
                     $candidatePdo = new PDO(
                         "mysql:host={$host};dbname={$name};charset=utf8mb4",
