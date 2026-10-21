@@ -16,7 +16,7 @@ Daily command:
     php database/migrate.php
     php database/backup.php
 
-The encrypted .pcbak file is an authenticated compressed logical snapshot. Schema and migrations remain versioned separately. The script keeps backups for 90 days and records hashes/status in backup_runs. It materializes rows in memory and is intended for small-to-medium installations; larger deployments should additionally use host-native database backup tooling.
+The encrypted .pcbak file is an authenticated compressed logical snapshot of database rows and encrypted upload files from storage/uploads. Schema and migrations remain versioned separately. The script keeps backups for 90 days and records hashes/status in backup_runs. It materializes rows and upload files in memory and is intended for small installations; larger deployments should additionally use host-native database backup tooling.
 
 Restore is destructive and requires a maintenance window plus an existing schema at the matching migration level. Take a fresh backup first:
     php database/backup.php
