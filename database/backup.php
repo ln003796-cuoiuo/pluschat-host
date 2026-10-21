@@ -14,11 +14,22 @@ if (!is_dir($directory) && !mkdir($directory, 0700, true) && !is_dir($directory)
 @chmod($directory, 0700);
 $pdo = pc_db();
 $tables = $pdo->query("SELECT table_name FROM information_schema.tables WHERE table_schema = DATABASE() AND table_type = 'BASE TABLE' ORDER BY table_name")->fetchAll(PDO::FETCH_COLUMN);
-$payload = ['format' => 'pluschat-logical-backup-v1', 'created_at' => gmdate('c'), 'database' => (string)pc_config('db_name', 'pluschat'), 'tables' => []];
+$payload = ['format' => 'pluschat-logical-backup-v1', 'created_at' => gmdate('c'), 'database' => (string)pc_config('db_name', 'pluschat'), 'tables' => [], 'uploads' => []];
 foreach ($tables as $table) {
     if (!is_string($table) || !preg_match('/^[A-Za-z0-9_]+$/', $table)) continue;
     $quoted = chr(96) . $table . chr(96);
     $payload['tables'][$table] = $pdo->query("SELECT * FROM {$quoted}")->fetchAll(PDO::FETCH_ASSOC);
+}
+$uploadDirectory = dirname(__DIR__) . '/storage/uploads';
+if (is_dir($uploadDirectory)) {
+    foreach (new RecursiveIteratorIterator(new RecursiveDirectoryIterator($uploadDirectory, FilesystemIterator::SKIP_DOTS)) as $item) {
+        if (!$item->isFile() || $item->isLink()) continue;
+        $relative = substr($item->getPathname(), strlen($uploadDirectory) + 1);
+        if ($relative === '' || str_contains($relative, '..') || str_contains($relative, DIRECTORY_SEPARATOR)) continue;
+        $bytes = file_get_contents($item->getPathname());
+        if (!is_string($bytes)) { fwrite(STDERR, "ERROR: Could not read an encrypted upload file.\\n"); exit(2); }
+        $payload['uploads'][$relative] = base64_encode($bytes);
+    }
 }
 $json = json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
 if (!is_string($json)) { fwrite(STDERR, "ERROR: Could not serialize database snapshot.\n"); exit(2); }
