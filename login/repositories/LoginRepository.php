@@ -5,7 +5,7 @@ final class PCLoginRepository
 {
     public static function findByLogin(PDO $pdo, string $login): ?array
     {
-        $stmt = $pdo->prepare('SELECT id, email, username, password_hash, first_name, last_name, birth_date, email_verified_at, phone, phone_verified_at, created_at FROM users WHERE email = ? OR username = ? LIMIT 1');
+        $stmt = $pdo->prepare('SELECT id, email, username, password_hash, first_name, last_name, birth_date, email_verified_at, created_at FROM users WHERE email = ? OR username = ? LIMIT 1');
         $stmt->execute([$login, $login]);
         $user = $stmt->fetch();
         return $user ?: null;
