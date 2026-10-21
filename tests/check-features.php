@@ -52,7 +52,7 @@ foreach (['pc_friends_dispatch','pc_saved_dispatch','pc_polls_dispatch','pc_chat
 }
 $setup = (string)file_get_contents($root . '/public/setup.php');
 $updater = (string)file_get_contents($root . '/public/update-database.php');
-if (!str_contains($setup, "\$name = 'Pluschat'") || !str_contains($setup, "foreach (['admin', 'Admin']")) $errors[] = 'Installer must use the Pluschat database and admin account first';
+if (!str_contains($setup, "\$name = 'pluschat'") || !str_contains($setup, "foreach (['Admin', 'admin']")) $errors[] = 'Installer must use the Pluschat database and admin account first';
 if (!str_contains($setup, 'database/migrations/*.sql') || str_contains($setup, 'textbee_api_key')) $errors[] = 'Installer must apply migrations without requiring SMS provider credentials';
 if (!str_contains($updater, 'HTTPS') || !str_contains($updater, 'hash_equals') || !str_contains($updater, 'schema_migrations')) $errors[] = 'Database updater must require HTTPS, verify the password, and track migrations';
 $giphyService = (string)file_get_contents($root . '/gifs/services/GiphyService.php');
