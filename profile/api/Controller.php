@@ -52,7 +52,7 @@ function pc_profile_dispatch(string $path, string $method): bool
                     END, UTC_DATE()
                 ) AS days_until
                 FROM users u JOIN user_settings s ON s.user_id = u.id
-                WHERE u.id <> ? AND u.email_verified_at IS NOT NULL AND u.phone_verified_at IS NOT NULL AND LEFT(u.username, 11) <> 'pc_pending_' AND u.birth_date IS NOT NULL
+                WHERE u.id <> ? AND u.email_verified_at IS NOT NULL AND LEFT(u.username, 11) <> 'pc_pending_' AND u.birth_date IS NOT NULL
                   AND s.show_birth_date = 1 AND s.profile_visibility <> 'nobody'
                   AND (s.profile_visibility = 'everyone' OR EXISTS (
                       SELECT 1 FROM conversation_members mine
