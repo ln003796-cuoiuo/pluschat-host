@@ -9,6 +9,28 @@ declare(strict_types=1);
 require_once dirname(__DIR__) . '/services/DeviceService.php';
 require_once dirname(__DIR__) . '/services/TwoFactorService.php';
 
+function pc_security_scope_member(PDO $pdo, string $scopeType, int $scopeId, int $userId): bool
+{
+    $tables = ['conversation' => ['conversation_members', 'conversation_id'], 'group' => ['group_members', 'group_id'], 'channel' => ['channel_members', 'channel_id']];
+    if (!isset($tables[$scopeType]) || $scopeId < 1 || $userId < 1) return false;
+    [$table, $scopeColumn] = $tables[$scopeType];
+    $sql = 'SELECT 1 FROM ' . $table . ' WHERE ' . $scopeColumn . ' = ? AND user_id = ? LIMIT 1';
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute([$scopeId, $userId]);
+    return (bool)$stmt->fetchColumn();
+}
+
+function pc_security_current_device_hash(PDO $pdo, int $userId): string
+{
+    $header = $_SERVER['HTTP_AUTHORIZATION'] ?? '';
+    if (!preg_match('/^Bearer\\s+([a-f0-9]{64})$/i', $header, $matches)) return '';
+    $stmt = $pdo->prepare('SELECT device_key_hash FROM auth_tokens WHERE token_hash = ? AND user_id = ? AND expires_at > UTC_TIMESTAMP() LIMIT 1');
+    $stmt->execute([hash('sha256', $matches[1]), $userId]);
+    $hash = $stmt->fetchColumn();
+    return is_string($hash) && preg_match('/^[a-f0-9]{64}$/', $hash) ? $hash : '';
+}
+
+
 function pc_security_dispatch(string $path, string $method): bool
 {
     if ($path === '/api/v1/auth/2fa/setup' && $method === 'POST') {
@@ -164,6 +186,100 @@ function pc_security_dispatch(string $path, string $method): bool
         );
         $stmt->execute([$peerId]);
         pc_json(200, ['ok' => true, 'keys' => $stmt->fetchAll()]);
+    }
+
+
+    if ($path === '/api/v1/security/one-time-prekeys' && $method === 'POST') {
+        $user = pc_require_verified_user();
+        pc_rate_limit('one-time-prekey-publish', 20, 3600);
+        if (!function_exists('sodium_crypto_sign_verify_detached')) pc_json(503, ['ok' => false, 'error' => 'server_crypto_extension_unavailable']);
+        $pdo = pc_db();
+        $deviceHash = pc_security_current_device_hash($pdo, (int)$user['id']);
+        if ($deviceHash === '') pc_json(409, ['ok' => false, 'error' => 'device_binding_required']);
+        $data = pc_input();
+        $prekeys = $data['prekeys'] ?? null;
+        if (!is_array($prekeys) || count($prekeys) < 1 || count($prekeys) > 100) pc_json(422, ['ok' => false, 'error' => 'invalid_prekey_batch']);
+        $identityStmt = $pdo->prepare('SELECT identity_public_key FROM user_crypto_keys WHERE user_id = ? AND device_key_hash = ? LIMIT 1');
+        $identityStmt->execute([$user['id'], $deviceHash]);
+        $identityEncoded = $identityStmt->fetchColumn();
+        $identity = is_string($identityEncoded) ? base64_decode(strtr($identityEncoded, '-_', '+/') . str_repeat('=', (4 - strlen($identityEncoded) % 4) % 4), true) : false;
+        if ($identity === false || strlen($identity) !== 32) pc_json(409, ['ok' => false, 'error' => 'identity_key_not_registered']);
+        $insert = $pdo->prepare('INSERT IGNORE INTO user_one_time_prekeys (user_id, device_key_hash, prekey_id, public_key, signature) VALUES (?, ?, ?, ?, ?)');
+        $stored = 0;
+        foreach ($prekeys as $item) {
+            if (!is_array($item)) pc_json(422, ['ok' => false, 'error' => 'invalid_prekey']);
+            $id = $item['id'] ?? null; $publicEncoded = $item['public_key'] ?? null; $signatureEncoded = $item['signature'] ?? null;
+            if (!is_string($id) || !preg_match('/^[A-Za-z0-9_-]{1,80}$/', $id) || !is_string($publicEncoded) || !preg_match('/^[A-Za-z0-9_-]+$/', $publicEncoded) || !is_string($signatureEncoded) || !preg_match('/^[A-Za-z0-9_-]+$/', $signatureEncoded)) pc_json(422, ['ok' => false, 'error' => 'invalid_prekey']);
+            $public = base64_decode(strtr($publicEncoded, '-_', '+/') . str_repeat('=', (4 - strlen($publicEncoded) % 4) % 4), true);
+            $signature = base64_decode(strtr($signatureEncoded, '-_', '+/') . str_repeat('=', (4 - strlen($signatureEncoded) % 4) % 4), true);
+            if ($public === false || strlen($public) !== 32 || $signature === false || strlen($signature) !== 64 || !sodium_crypto_sign_verify_detached($signature, $public, $identity)) pc_json(422, ['ok' => false, 'error' => 'invalid_prekey_signature']);
+            $insert->execute([$user['id'], $deviceHash, $id, $publicEncoded, $signatureEncoded]);
+            $stored += $insert->rowCount();
+        }
+        pc_json(201, ['ok' => true, 'stored' => $stored]);
+    }
+
+    if (preg_match('#^/api/v1/security/one-time-prekey/([1-9][0-9]*)$#', $path, $matches) && $method === 'GET') {
+        $user = pc_require_verified_user();
+        $peerId = (int)$matches[1];
+        if ($peerId === (int)$user['id']) pc_json(422, ['ok' => false, 'error' => 'invalid_peer_id']);
+        $pdo = pc_db();
+        $direct = $pdo->prepare('SELECT 1 FROM conversation_members a JOIN conversation_members b ON b.conversation_id = a.conversation_id WHERE a.user_id = ? AND b.user_id = ? AND (SELECT COUNT(*) FROM conversation_members all_members WHERE all_members.conversation_id = a.conversation_id) = 2 LIMIT 1');
+        $direct->execute([$user['id'], $peerId]);
+        if (!$direct->fetchColumn()) pc_json(404, ['ok' => false, 'error' => 'user_not_found']);
+        $blocked = $pdo->prepare('SELECT 1 FROM user_blocks WHERE (user_id = ? AND blocked_user_id = ?) OR (user_id = ? AND blocked_user_id = ?) LIMIT 1');
+        $blocked->execute([$user['id'], $peerId, $peerId, $user['id']]);
+        if ($blocked->fetchColumn()) pc_json(403, ['ok' => false, 'error' => 'key_exchange_not_allowed']);
+        $pdo->beginTransaction();
+        try {
+            $stmt = $pdo->prepare('SELECT id, device_key_hash, prekey_id, public_key, signature FROM user_one_time_prekeys WHERE user_id = ? AND consumed_at IS NULL ORDER BY id LIMIT 1 FOR UPDATE');
+            $stmt->execute([$peerId]);
+            $oneTime = $stmt->fetch();
+            if (!$oneTime) { $pdo->commit(); pc_json(200, ['ok' => true, 'one_time_prekey' => null]); }
+            $pdo->prepare('UPDATE user_one_time_prekeys SET consumed_at = UTC_TIMESTAMP() WHERE id = ? AND consumed_at IS NULL')->execute([$oneTime['id']]);
+            $keyStmt = $pdo->prepare('SELECT identity_public_key, signed_prekey, signed_prekey_signature, key_version FROM user_crypto_keys WHERE user_id = ? AND device_key_hash = ? LIMIT 1');
+            $keyStmt->execute([$peerId, $oneTime['device_key_hash']]);
+            $bundle = $keyStmt->fetch();
+            $pdo->commit();
+            pc_json(200, ['ok' => true, 'key_bundle' => $bundle ?: null, 'one_time_prekey' => $bundle ? ['id' => $oneTime['prekey_id'], 'public_key' => $oneTime['public_key'], 'signature' => $oneTime['signature'], 'device_key_id' => $oneTime['device_key_hash']] : null]);
+        } catch (Throwable $e) {
+            if ($pdo->inTransaction()) $pdo->rollBack();
+            throw $e;
+        }
+    }
+
+    if ($path === '/api/v1/security/key-envelopes' && $method === 'POST') {
+        $user = pc_require_verified_user();
+        pc_rate_limit('key-envelope-write', 120, 60);
+        $pdo = pc_db();
+        $data = pc_input();
+        $scopeType = is_string($data['scope_type'] ?? null) ? $data['scope_type'] : '';
+        $scopeId = filter_var($data['scope_id'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
+        $recipientId = filter_var($data['recipient_user_id'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
+        $deviceHash = is_string($data['recipient_device_hash'] ?? null) ? strtolower($data['recipient_device_hash']) : '';
+        $keyId = is_string($data['key_id'] ?? null) ? $data['key_id'] : '';
+        $ciphertext = is_string($data['envelope_ciphertext'] ?? null) ? $data['envelope_ciphertext'] : '';
+        if (!in_array($scopeType, ['conversation', 'group', 'channel'], true) || !$scopeId || !$recipientId || !preg_match('/^[a-f0-9]{64}$/', $deviceHash) || !preg_match('/^[A-Za-z0-9._:-]{1,128}$/', $keyId) || strlen($ciphertext) < 32 || strlen($ciphertext) > 200000 || !preg_match('/^[A-Za-z0-9_=-]+$/', $ciphertext)) pc_json(422, ['ok' => false, 'error' => 'invalid_key_envelope']);
+        if (!pc_security_scope_member($pdo, $scopeType, (int)$scopeId, (int)$user['id']) || !pc_security_scope_member($pdo, $scopeType, (int)$scopeId, (int)$recipientId)) pc_json(403, ['ok' => false, 'error' => 'key_envelope_scope_access_denied']);
+        $device = $pdo->prepare('SELECT 1 FROM user_crypto_keys WHERE user_id = ? AND device_key_hash = ? LIMIT 1');
+        $device->execute([$recipientId, $deviceHash]);
+        if (!$device->fetchColumn()) pc_json(404, ['ok' => false, 'error' => 'recipient_device_key_not_found']);
+        $stmt = $pdo->prepare('INSERT INTO encrypted_key_envelopes (scope_type, scope_id, recipient_user_id, recipient_device_hash, sender_user_id, key_id, envelope_ciphertext) VALUES (?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE sender_user_id = VALUES(sender_user_id), envelope_ciphertext = VALUES(envelope_ciphertext), created_at = UTC_TIMESTAMP()');
+        $stmt->execute([$scopeType, $scopeId, $recipientId, $deviceHash, $user['id'], $keyId, $ciphertext]);
+        pc_json(201, ['ok' => true, 'stored' => true]);
+    }
+
+    if ($path === '/api/v1/security/key-envelopes' && $method === 'GET') {
+        $user = pc_require_verified_user();
+        $pdo = pc_db();
+        $deviceHash = pc_security_current_device_hash($pdo, (int)$user['id']);
+        if ($deviceHash === '') pc_json(409, ['ok' => false, 'error' => 'device_binding_required']);
+        $scopeType = is_string($_GET['scope_type'] ?? null) ? $_GET['scope_type'] : '';
+        $scopeId = filter_var($_GET['scope_id'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
+        if (!in_array($scopeType, ['conversation', 'group', 'channel'], true) || !$scopeId || !pc_security_scope_member($pdo, $scopeType, (int)$scopeId, (int)$user['id'])) pc_json(422, ['ok' => false, 'error' => 'invalid_key_envelope_scope']);
+        $stmt = $pdo->prepare('SELECT key_id, algorithm, envelope_ciphertext, created_at FROM encrypted_key_envelopes WHERE scope_type = ? AND scope_id = ? AND recipient_user_id = ? AND recipient_device_hash = ? ORDER BY created_at DESC LIMIT 100');
+        $stmt->execute([$scopeType, $scopeId, $user['id'], $deviceHash]);
+        pc_json(200, ['ok' => true, 'envelopes' => $stmt->fetchAll()]);
     }
 
     if ($path === '/api/v1/devices' && $method === 'GET') {
