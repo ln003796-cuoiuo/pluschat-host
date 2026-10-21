@@ -53,9 +53,7 @@ foreach (['pc_friends_dispatch','pc_saved_dispatch','pc_polls_dispatch','pc_chat
 $setup = (string)file_get_contents($root . '/public/setup.php');
 $updater = (string)file_get_contents($root . '/public/update-database.php');
 if (!str_contains($setup, "\$name = 'Pluschat'") || !str_contains($setup, "foreach (['admin', 'Admin']")) $errors[] = 'Installer must use the Pluschat database and admin account first';
-if (!str_contains($setup, '6ad27e0e10b63ade60583c87')) $errors[] = 'Installer must include the configured TextBee device ID without a public API key';
-if (!str_contains($setup, 'database/migrations/*.sql') || !str_contains($setup, 'phone_verification_codes') || !str_contains($setup, 'textbee_device_id')) $errors[] = 'Installer must apply all migrations and keep TextBee settings private';
-if (!str_contains($setup, 'name="textbee_api_key"') || !str_contains($setup, "'textbee_api_key' => \$textbeeApiKey")) $errors[] = 'Installer must save TextBee key privately from the HTTPS form';
+if (!str_contains($setup, 'database/migrations/*.sql') || str_contains($setup, 'textbee_api_key')) $errors[] = 'Installer must apply migrations without requiring SMS provider credentials';
 if (!str_contains($updater, 'HTTPS') || !str_contains($updater, 'hash_equals') || !str_contains($updater, 'schema_migrations')) $errors[] = 'Database updater must require HTTPS, verify the password, and track migrations';
 $giphyService = (string)file_get_contents($root . '/gifs/services/GiphyService.php');
 $giphyController = (string)file_get_contents($root . '/gifs/api/Controller.php');
@@ -64,10 +62,6 @@ if (!str_contains($index, 'pc_giphy_dispatch') || !str_contains($index, "'gif_pr
 if (!str_contains($giphyService, 'api.giphy.com/v1/gifs/search') || !str_contains($giphyService, 'pc_config')) $errors[] = 'GIPHY service must use the private server-side API key';
 if (!str_contains($giphyController, "pc_rate_limit('giphy-search', 30, 60)") || !str_contains($giphyController, 'pc_require_verified_user')) $errors[] = 'GIF search must be authenticated and rate-limited';
 $registrationController = (string)file_get_contents($root . '/register/api/Controller.php');
-if (!str_contains($registrationController, "pc_rate_limit('resend-phone-code-daily', 10, 86400)")) $errors[] = 'SMS resend must be limited to 10 attempts per IP per 24 hours';
-$textBee = (string)file_get_contents($root . '/register/services/TextBeeService.php');
-if (!str_contains($textBee, 'PLUSCHAT_TEXTBEE_API_KEY') || !str_contains($textBee, 'x-api-key')) $errors[] = 'TextBee must read its key privately and authenticate SMS requests';
-if (!str_contains($textBee, 'PLUSCHAT_TEXTBEE_DEVICE_ID') || !str_contains($textBee, "'deviceId' => \$deviceId")) $errors[] = 'TextBee request must include the configured gateway device ID';
 $registrationValidator = (string)file_get_contents($root . '/register/validators/RegistrationValidator.php');
 $registrationService = (string)file_get_contents($root . '/register/services/RegistrationService.php');
 $profileValidator = (string)file_get_contents($root . '/profile/validators/ProfileValidator.php');
@@ -76,7 +70,6 @@ if (!str_contains($registrationService, 'pc_pending_') || !str_contains($profile
 if (!str_contains($profileService, 'username_taken') || !str_contains($profileService, 'username_required')) $errors[] = 'Profile completion must require a unique public nickname';
 $entryProfile = (string)file_get_contents($root . '/public/index.php');
 if (!str_contains($entryProfile, 'profile_completion_required') || !str_contains($entryProfile, "'profile_completed' => \$profileCompleted")) $errors[] = 'Incomplete profiles must be blocked from feature APIs and hidden in public user data';
-if (!str_contains($registrationValidator, 'invalid_phone')) $errors[] = 'Registration must validate phone number';
 if (!str_contains($registrationValidator, 'first_name_required')) $errors[] = 'Registration must require first name';
 $registrationRepository = (string)file_get_contents($root . '/register/repositories/RegistrationRepository.php');
 if (!str_contains($registrationRepository, 'confirmCode') || !str_contains($registrationRepository, 'INTERVAL 15 MINUTE')) $errors[] = 'Short-lived email verification code flow is missing';
@@ -90,9 +83,7 @@ if (!str_contains($profileController, '/api/v1/me/avatar')) $errors[] = 'Avatar 
 $twoFactorService = (string)file_get_contents($root . '/security/services/TwoFactorService.php');
 if (!str_contains($twoFactorService, 'sodium_crypto_secretbox') || !str_contains($twoFactorService, 'verifyCode')) $errors[] = 'Encrypted TOTP secret storage or TOTP validation is missing';
 $loginService = (string)file_get_contents($root . '/login/services/LoginService.php');
-if (!str_contains($loginService, "'error' => 'phone_required'") || !str_contains($loginService, "'error' => 'phone_not_verified'")) $errors[] = 'Login must require a phone number and SMS verification';
 $bootstrapAuth = (string)file_get_contents($root . '/bootstrap.php');
-if (!str_contains($bootstrapAuth, 'AND u.phone IS NOT NULL AND u.phone_verified_at IS NOT NULL')) $errors[] = 'Bearer API authentication must require verified phone number';
 if (!str_contains($loginService, 'requires_2fa') || str_contains($loginService, 'requires_2fa_setup')) $errors[] = '2FA must be optional unless a user has enabled it';
 $securityController = (string)file_get_contents($root . '/security/api/Controller.php');
 foreach (['/api/v1/auth/2fa/setup','/api/v1/auth/2fa/confirm','/api/v1/auth/2fa/verify','/api/v1/auth/2fa/disable','verifyCurrentCode'] as $route) {
