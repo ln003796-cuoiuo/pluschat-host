@@ -37,4 +37,10 @@ if(is_resource($p)){fclose($gp[0]);$gout=stream_get_contents($gp[1]);fclose($gp[
 if($gcode!==0||!is_file($encrypted)||filesize($encrypted)<64){@unlink($encrypted);$pdo->prepare("UPDATE backup_runs SET status='failed',finished_at=UTC_TIMESTAMP(),details=? WHERE id=?")->execute([substr(trim((string)$gerr)?:'gpg encryption failed',0,900),$runId]);fwrite(STDERR,"Backup encryption failed.\n");exit(7);}
 @chmod($encrypted,0600);$sha=hash_file('sha256',$encrypted);$bytes=filesize($encrypted);
 $pdo->prepare("UPDATE backup_runs SET status='success',artifact_sha256=?,bytes_written=?,finished_at=UTC_TIMESTAMP() WHERE id=?")->execute([$sha,$bytes,$runId]);
+// Apply 90-day retention only after a new encrypted backup has succeeded.
+foreach (glob($dir.'/pluschat-*.sql.gpg') ?: [] as $oldBackup) {
+    if ($oldBackup !== $encrypted && is_file($oldBackup) && filemtime($oldBackup) < time() - (90 * 86400)) {
+        @unlink($oldBackup);
+    }
+}
 fwrite(STDOUT,"Encrypted backup success: ".basename($encrypted)." bytes=".$bytes." sha256=".$sha."\n");
