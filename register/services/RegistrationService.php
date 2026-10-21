@@ -21,7 +21,7 @@ final class PCRegistrationService
             $user['username'] = 'pc_pending_' . bin2hex(random_bytes(8));
         }
         if (PCRegistrationRepository::isTaken($pdo, $user['email'], $user['username'])) {
-            return ['status' => 409, 'body' => ['ok' => false, 'error' => 'email_username_or_phone_taken', 'message' => 'Email, имя пользователя или номер уже используется.']];
+            return ['status' => 409, 'body' => ['ok' => false, 'error' => 'email_or_username_taken', 'message' => 'Электронная почта уже используется.']];
         }
 
         $codes = PCRegistrationRepository::create($pdo, $user);
