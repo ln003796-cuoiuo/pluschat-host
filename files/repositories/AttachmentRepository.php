@@ -10,10 +10,10 @@ final class PCAttachmentRepository
         return (bool)$stmt->fetch();
     }
 
-    public static function create(PDO $pdo, int $messageId, string $storageKey, string $name, string $mime, int $size, string $sha256): string
+    public static function create(PDO $pdo, int $messageId, string $storageKey, string $name, string $mime, int $size, string $sha256, string $mediaKind = 'file', ?int $durationMs = null): string
     {
-        $stmt = $pdo->prepare("INSERT INTO message_attachments (message_id, storage_key, original_name, mime_type, byte_size, sha256, encryption_version) VALUES (?, ?, ?, ?, ?, ?, 'pc-e2ee-v1')");
-        $stmt->execute([$messageId, $storageKey, $name, $mime, $size, $sha256]);
+        $stmt = $pdo->prepare("INSERT INTO message_attachments (message_id, storage_key, original_name, mime_type, byte_size, sha256, encryption_version, media_kind, duration_ms) VALUES (?, ?, ?, ?, ?, ?, 'pc-e2ee-v1', ?, ?)");
+        $stmt->execute([$messageId, $storageKey, $name, $mime, $size, $sha256, $mediaKind, $durationMs]);
         return (string)$pdo->lastInsertId();
     }
 
