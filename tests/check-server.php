@@ -32,6 +32,10 @@ $requiredFiles = [
     'public/update-database.php',
     'bootstrap.php',
     'database/schema.sql',
+    'database/backup.php',
+    'database/restore.php',
+    'database/migrations/010_encrypted_media_keys_backups.sql',
+    'docs/SECURITY_MEDIA_BACKUPS.md',
     'register/api/Controller.php',
     'register/services/RegistrationService.php',
     'register/repositories/RegistrationRepository.php',
@@ -102,6 +106,13 @@ foreach (['security/api/Controller.php'] as $relative) {
 }
 
 $securitySource = (string)file_get_contents($root . '/security/api/Controller.php');
+foreach (['/api/v1/security/one-time-prekeys', '/api/v1/security/one-time-prekey/', '/api/v1/security/key-envelopes'] as $keyRoute) {
+    if (!str_contains($securitySource, $keyRoute)) $errors[] = 'Key exchange endpoint missing: ' . $keyRoute;
+}
+foreach (['database/backup.php', 'database/restore.php'] as $backupScript) {
+    $source = (string)file_get_contents($root . '/' . $backupScript);
+    if (!str_contains($source, 'sodium_crypto_aead_xchacha20poly1305_ietf')) $errors[] = 'Encrypted backup protection missing: ' . $backupScript;
+}
 if (str_contains($securitySource, 'Bearer\\\\\\\\s+')) {
     $errors[] = 'Security API contains an over-escaped Bearer-token regex';
 }
