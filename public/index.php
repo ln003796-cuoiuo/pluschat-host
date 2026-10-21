@@ -113,8 +113,9 @@ try {
                 'missing_table_count' => count($missing),
             ]);
         }
-        $textbeeConfigured = trim((string)pc_config('textbee_api_key', '')) !== ''
-            && trim((string)pc_config('textbee_device_id', '')) !== '';
+        $textbeeConfigured = trim((string)pc_config('textbee_api_key', '') ?: (string)(getenv('PLUSCHAT_TEXTBEE_API_KEY') ?: '')) !== ''
+            && trim((string)pc_config('textbee_device_id', '') ?: (string)(getenv('PLUSCHAT_TEXTBEE_DEVICE_ID') ?: '')) !== '';
+        $giphyConfigured = trim((string)pc_config('giphy_api_key', '') ?: (string)(getenv('PLUSCHAT_GIPHY_API_KEY') ?: '')) !== '';
         pc_json(200, [
             'ok' => true,
             'service' => 'pluschat-api',
@@ -122,6 +123,7 @@ try {
             'database' => 'connected',
             'schema' => 'ready',
             'sms_provider' => $textbeeConfigured ? 'configured' : 'not_configured',
+            'gif_provider' => $giphyConfigured ? 'configured' : 'not_configured',
         ]);
     }
 
@@ -147,6 +149,7 @@ try {
     require_once dirname(__DIR__) . '/stories/api/Controller.php';
     require_once dirname(__DIR__) . '/password/api/Controller.php';
     require_once dirname(__DIR__) . '/calls/api/Controller.php';
+    require_once dirname(__DIR__) . '/gifs/api/Controller.php';
 
     if (pc_register_dispatch($path, $method)) { exit; }
     if (pc_login_dispatch($path, $method)) { exit; }
@@ -169,6 +172,7 @@ try {
     if (pc_stories_dispatch($path, $method)) { exit; }
     if (pc_password_dispatch($path, $method)) { exit; }
     if (pc_calls_dispatch($path, $method)) { exit; }
+    if (pc_giphy_dispatch($path, $method)) { exit; }
 
     pc_json(404, ['ok' => false, 'error' => 'endpoint_not_found', 'path' => $path]);
 } catch (PDOException $e) {
