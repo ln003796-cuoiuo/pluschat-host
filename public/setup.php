@@ -31,15 +31,12 @@ if (empty($_SESSION['pluschat_setup_csrf'])) {
 if (!$alreadyConfigured && ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
     $csrf = is_string($_POST['csrf'] ?? null) ? $_POST['csrf'] : '';
     $password = is_string($_POST['db_password'] ?? null) ? $_POST['db_password'] : '';
-    $textbeeApiKey = trim(is_string($_POST['textbee_api_key'] ?? null) ? $_POST['textbee_api_key'] : (string)(getenv('PLUSCHAT_TEXTBEE_API_KEY') ?: ''));
     $giphyApiKey = trim(is_string($_POST['giphy_api_key'] ?? null) ? $_POST['giphy_api_key'] : (string)(getenv('PLUSCHAT_GIPHY_API_KEY') ?: ''));
 
     if (!hash_equals((string)$_SESSION['pluschat_setup_csrf'], $csrf)) {
         $error = 'Сессия формы истекла. Обновите страницу и попробуйте снова.';
     } elseif ($password === '' || strlen($password) > 1024) {
         $error = 'Введите пароль базы данных.';
-    } elseif ($textbeeApiKey === '' || strlen($textbeeApiKey) > 512) {
-        $error = 'Для обязательного подтверждения по SMS укажите API-ключ TextBee в защищённой форме или настройте PLUSCHAT_TEXTBEE_API_KEY на хостинге.';
     } elseif (empty($_SERVER['HTTPS']) || $_SERVER['HTTPS'] === 'off') {
         $error = 'Для безопасной настройки сначала включите HTTPS на домене.';
     } elseif ($requirements !== []) {
@@ -120,7 +117,7 @@ if (!$alreadyConfigured && ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
                 'channel_members', 'topics', 'topic_messages', 'message_attachments',
                 'message_receipts', 'message_reactions', 'reports', 'admin_users',
                 'notifications', 'group_messages', 'channel_posts', 'api_rate_limits',
-                'user_crypto_keys', 'friend_requests', 'friendships', 'saved_messages', 'polls', 'poll_options', 'poll_votes', 'chat_preferences', 'chat_folders', 'chat_folder_items', 'stories', 'story_views', 'password_reset_tokens', 'message_hidden', 'user_two_factor', 'two_factor_setups', 'two_factor_challenges', 'user_avatars', 'phone_verification_codes', 'calls', 'call_participants', 'call_signals',
+                'user_crypto_keys', 'friend_requests', 'friendships', 'saved_messages', 'polls', 'poll_options', 'poll_votes', 'chat_preferences', 'chat_folders', 'chat_folder_items', 'stories', 'story_views', 'password_reset_tokens', 'message_hidden', 'user_two_factor', 'two_factor_setups', 'two_factor_challenges', 'user_avatars', 'calls', 'call_participants', 'call_signals', 'user_one_time_prekeys', 'encrypted_key_envelopes', 'backup_runs',
             ];
             $tableCheck = $pdo->prepare(
                 'SELECT COUNT(*) FROM information_schema.tables
@@ -140,10 +137,10 @@ if (!$alreadyConfigured && ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
                 'db_name' => $name,
                 'db_user' => $user,
                 'db_password' => $password,
-                // Set privately by the hosting environment if configured. Never commit API keys.
-                'textbee_api_key' => $textbeeApiKey,
+                // Provider keys and backup secrets are configured privately after setup.
                 'giphy_api_key' => $giphyApiKey,
-                'textbee_device_id' => (string)(getenv('PLUSCHAT_TEXTBEE_DEVICE_ID') ?: '6ad27e0e10b63ade60583c87'),
+                'backup_encryption_key' => '',
+                'backup_directory' => dirname(__DIR__) . '/../pluschat-private-backups',
                 'app_secret' => bin2hex(random_bytes(32)),
                 'mail_from' => 'register@плюсчат.рф',
                 'app_base_url' => 'https://xn--80avljg2a1c.xn--p1ai',
@@ -161,7 +158,7 @@ if (!$alreadyConfigured && ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
             @chmod($configPath, 0600);
             $alreadyConfigured = true;
             $success = true;
-            unset($_POST['db_password'], $_POST['textbee_api_key'], $_POST['giphy_api_key']);
+            unset($_POST['db_password'], $_POST['giphy_api_key']);
             $_SESSION = [];
             session_regenerate_id(true);
         } catch (Throwable $e) {
@@ -212,8 +209,6 @@ button{width:100%;margin-top:16px;border:0;border-radius:12px;padding:15px;backg
       <input type="hidden" name="csrf" value="<?= htmlspecialchars((string)$_SESSION['pluschat_setup_csrf'], ENT_QUOTES, 'UTF-8') ?>">
       <label for="db_password">Пароль базы данных</label>
       <input id="db_password" name="db_password" type="password" required maxlength="1024" autocomplete="new-password" autofocus>
-      <label for="textbee_api_key" style="margin-top:18px">API-ключ TextBee</label>
-      <input id="textbee_api_key" name="textbee_api_key" type="password" required maxlength="512" autocomplete="new-password">
       <label for="giphy_api_key" style="margin-top:18px">GIPHY API-ключ (необязательно)</label>
       <input id="giphy_api_key" name="giphy_api_key" type="password" maxlength="512" autocomplete="new-password">
       <button type="submit">Проверить и настроить сервер</button>
