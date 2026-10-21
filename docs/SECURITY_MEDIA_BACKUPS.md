@@ -10,7 +10,7 @@ The existing attachment endpoint accepts encrypted bytes only and stores them ou
 Migration 010 adds a one-time public-prekey table and a recipient-device encrypted key-envelope table. Store ciphertext envelopes only. Clients must verify identity keys/signatures locally and refuse to send when a recipient has no trusted key. Group/channel envelopes are not a substitute for a reviewed group E2EE protocol. Public channel posts must not be labelled end-to-end encrypted unless readers are explicitly provisioned with keys.
 
 ## Backups
-Set PLUSCHAT_BACKUP_KEY to a randomly generated secret of at least 32 characters. Set PLUSCHAT_BACKUP_DIR to a private directory outside the web root, preferably on separate storage. PHP CLI needs PDO MySQL, JSON, zlib and sodium.
+The HTTPS setup wizard generates a random backup encryption key and stores it in private config.php (mode 0600), so no extra value is required from the owner. Protect and back up that key separately: losing it makes existing backups undecryptable. PLUSCHAT_BACKUP_KEY can override the configured key, and PLUSCHAT_BACKUP_DIR can override the private backup directory outside the web root. PHP CLI needs PDO MySQL, JSON, zlib and sodium.
 
 Daily command:
     php database/migrate.php
