@@ -54,7 +54,6 @@ function pc_public_user(array $user): array {
         'last_name' => (string)($user['last_name'] ?? ''),
         'birth_date' => $user['birth_date'] ?? null,
         'email_verified' => !empty($user['email_verified_at']),
-        'phone_verified' => !empty($user['phone_verified_at']),
         'created_at' => $user['created_at'] ?? null,
     ];
 }
