@@ -6,7 +6,6 @@ final class PCRegistrationValidator
     public static function validate(array $data): array
     {
         $email = strtolower(is_string($data['email'] ?? null) ? trim($data['email']) : '');
-        $phone = is_string($data['phone'] ?? null) ? preg_replace('/[\\s().-]+/', '', trim($data['phone'])) : '';
         // Public nickname is assigned only after email verification in profile completion.
         $username = '';
         $password = is_string($data['password'] ?? null) ? $data['password'] : '';
@@ -16,9 +15,6 @@ final class PCRegistrationValidator
 
         if (!filter_var($email, FILTER_VALIDATE_EMAIL) || pc_len($email) > 254) {
             return ['error' => 'invalid_email'];
-        }
-        if (!is_string($phone) || !preg_match('/^\\+[1-9][0-9]{7,14}$/', $phone)) {
-            return ['error' => 'invalid_phone', 'message' => 'Укажи номер в международном формате, например +491234567890.'];
         }
         if (strlen($password) < 10 || strlen($password) > 200) {
             return ['error' => 'invalid_password', 'message' => 'Пароль должен содержать от 10 до 200 символов.'];
@@ -38,7 +34,6 @@ final class PCRegistrationValidator
 
         return [
             'email' => $email,
-            'phone' => $phone,
             'username' => $username,
             'password' => $password,
             'first_name' => $firstName,
