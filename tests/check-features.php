@@ -56,6 +56,14 @@ if (!str_contains($setup, '6ad27e0e10b63ade60583c87')) $errors[] = 'Installer mu
 if (!str_contains($setup, 'database/migrations/*.sql') || !str_contains($setup, 'phone_verification_codes') || !str_contains($setup, 'textbee_device_id')) $errors[] = 'Installer must apply all migrations and keep TextBee settings private';
 if (!str_contains($setup, 'name="textbee_api_key"') || !str_contains($setup, "'textbee_api_key' => \$textbeeApiKey")) $errors[] = 'Installer must save TextBee key privately from the HTTPS form';
 if (!str_contains($updater, 'HTTPS') || !str_contains($updater, 'hash_equals') || !str_contains($updater, 'schema_migrations')) $errors[] = 'Database updater must require HTTPS, verify the password, and track migrations';
+$giphyService = (string)file_get_contents($root . '/gifs/services/GiphyService.php');
+$giphyController = (string)file_get_contents($root . '/gifs/api/Controller.php');
+if (!str_contains($setup, 'name="giphy_api_key"') || !str_contains($setup, "'giphy_api_key' => \$giphyApiKey")) $errors[] = 'Installer must store optional GIPHY API key privately';
+if (!str_contains($index, 'pc_giphy_dispatch') || !str_contains($index, "'gif_provider' => \$giphyConfigured")) $errors[] = 'GIPHY endpoint and safe health status must be wired';
+if (!str_contains($giphyService, 'api.giphy.com/v1/gifs/search') || !str_contains($giphyService, 'pc_config')) $errors[] = 'GIPHY service must use the private server-side API key';
+if (!str_contains($giphyController, "pc_rate_limit('giphy-search', 30, 60)") || !str_contains($giphyController, 'pc_require_verified_user')) $errors[] = 'GIF search must be authenticated and rate-limited';
+$registrationController = (string)file_get_contents($root . '/register/api/Controller.php');
+if (!str_contains($registrationController, "pc_rate_limit('resend-phone-code-daily', 10, 86400)")) $errors[] = 'SMS resend must be limited to 10 attempts per IP per 24 hours';
 $textBee = (string)file_get_contents($root . '/register/services/TextBeeService.php');
 if (!str_contains($textBee, 'PLUSCHAT_TEXTBEE_API_KEY') || !str_contains($textBee, 'x-api-key')) $errors[] = 'TextBee must read its key privately and authenticate SMS requests';
 if (!str_contains($textBee, 'PLUSCHAT_TEXTBEE_DEVICE_ID') || !str_contains($textBee, "'deviceId' => \$deviceId")) $errors[] = 'TextBee request must include the configured gateway device ID';
