@@ -36,7 +36,7 @@ final class PCAttachmentService
         @chmod($target, 0600);
         $sha = hash_file('sha256', $target);
         try {
-            $id = PCAttachmentRepository::create($pdo, $messageId, $storageKey, $meta['original_name'], $meta['mime_type'], $meta['size'], $sha);
+            $id = PCAttachmentRepository::create($pdo, $messageId, $storageKey, $meta['original_name'], $meta['mime_type'], $meta['size'], $sha, $meta['media_kind'], $meta['duration_ms']);
         } catch (Throwable $e) {
             @unlink($target);
             throw $e;
