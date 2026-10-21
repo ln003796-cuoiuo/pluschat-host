@@ -20,9 +20,17 @@ final class PCAttachmentValidator
         if (is_resource($handle)) fclose($handle);
         if ($magic !== "PCF1") return ['status' => 422, 'error' => 'invalid_encrypted_attachment_envelope'];
 
-        // Keep filename and MIME metadata private; the encrypted client manifest carries the real values.
-        $name = 'encrypted.bin';
-        $mime = 'application/octet-stream';
-        return ['size' => $size, 'original_name' => $name, 'mime_type' => $mime, 'tmp_name' => (string)$file['tmp_name']];
+        $kind = is_string($post['media_kind'] ?? null) ? $post['media_kind'] : 'file';
+        if (!in_array($kind, ['file', 'voice', 'sticker', 'gif'], true)) {
+            return ['status' => 422, 'error' => 'invalid_media_kind'];
+        }
+        $duration = null;
+        if ($kind === 'voice') {
+            $duration = filter_var($post['duration_ms'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1, 'max_range' => 3600000]]);
+            if ($duration === false) return ['status' => 422, 'error' => 'invalid_voice_duration'];
+        }
+        // Keep filename and MIME metadata private; encrypted client manifest carries real values.
+        return ['size' => $size, 'original_name' => 'encrypted.bin', 'mime_type' => 'application/octet-stream',
+            'media_kind' => $kind, 'duration_ms' => $duration, 'tmp_name' => (string)$file['tmp_name']];
     }
 }
