@@ -216,6 +216,8 @@ CREATE TABLE IF NOT EXISTS message_attachments (
     byte_size BIGINT UNSIGNED NOT NULL,
     sha256 CHAR(64) NOT NULL,
     encryption_version VARCHAR(32) NOT NULL DEFAULT 'pc-e2ee-v1',
+    media_kind ENUM('file','voice','sticker','gif') NOT NULL DEFAULT 'file',
+    duration_ms INT UNSIGNED NULL,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     INDEX idx_attachment_message (message_id),
     CONSTRAINT fk_attachment_message FOREIGN KEY (message_id) REFERENCES messages(id) ON DELETE CASCADE
@@ -565,4 +567,47 @@ CREATE TABLE IF NOT EXISTS call_signals (
     CONSTRAINT fk_call_signal_from FOREIGN KEY (from_user_id) REFERENCES users(id) ON DELETE CASCADE,
     CONSTRAINT fk_call_signal_to FOREIGN KEY (to_user_id) REFERENCES users(id) ON DELETE CASCADE,
     INDEX idx_call_signals_poll (call_id, to_user_id, id, expires_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Encrypted media, public one-time prekeys and per-device encrypted key envelopes.
+CREATE TABLE IF NOT EXISTS user_one_time_prekeys (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    user_id BIGINT UNSIGNED NOT NULL,
+    device_key_hash CHAR(64) NOT NULL,
+    prekey_id VARCHAR(80) NOT NULL,
+    public_key VARCHAR(128) NOT NULL,
+    signature VARCHAR(128) NOT NULL,
+    consumed_at DATETIME NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_one_time_prekey (user_id, device_key_hash, prekey_id),
+    INDEX idx_one_time_prekey_available (user_id, consumed_at, id),
+    CONSTRAINT fk_one_time_prekey_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS encrypted_key_envelopes (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    scope_type ENUM('conversation','group','channel') NOT NULL,
+    scope_id BIGINT UNSIGNED NOT NULL,
+    recipient_user_id BIGINT UNSIGNED NOT NULL,
+    recipient_device_hash CHAR(64) NOT NULL,
+    sender_user_id BIGINT UNSIGNED NOT NULL,
+    key_id VARCHAR(128) NOT NULL,
+    algorithm VARCHAR(40) NOT NULL DEFAULT 'X25519-HKDF-SHA256-AES256GCM',
+    envelope_ciphertext MEDIUMTEXT NOT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_scope_recipient_device_key (scope_type, scope_id, recipient_user_id, recipient_device_hash, key_id),
+    INDEX idx_key_envelope_recipient (recipient_user_id, recipient_device_hash, created_at),
+    CONSTRAINT fk_key_envelope_recipient FOREIGN KEY (recipient_user_id) REFERENCES users(id) ON DELETE CASCADE,
+    CONSTRAINT fk_key_envelope_sender FOREIGN KEY (sender_user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS backup_runs (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    backup_name VARCHAR(255) NOT NULL,
+    sha256 CHAR(64) NOT NULL,
+    byte_size BIGINT UNSIGNED NOT NULL,
+    status ENUM('created','verified','failed','restored') NOT NULL,
+    details VARCHAR(1000) NOT NULL DEFAULT '',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_backup_runs_created (created_at, status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
