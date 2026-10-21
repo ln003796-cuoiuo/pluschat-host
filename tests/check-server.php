@@ -72,7 +72,7 @@ foreach ($requiredFiles as $relative) {
 }
 
 $schema = (string)file_get_contents($root . '/database/schema.sql');
-foreach (['users', 'auth_tokens', 'conversations', 'messages', 'chat_groups', 'channels', 'topics', 'message_attachments', 'notifications', 'reports', 'user_crypto_keys', 'calls', 'call_participants', 'call_signals'] as $table) {
+foreach (['users', 'auth_tokens', 'conversations', 'messages', 'chat_groups', 'channels', 'topics', 'message_attachments', 'notifications', 'reports', 'user_crypto_keys', 'calls', 'call_participants', 'call_signals', 'user_one_time_prekeys', 'encrypted_key_envelopes', 'backup_runs'] as $table) {
     if (!preg_match('/CREATE\s+TABLE\s+IF\s+NOT\s+EXISTS\s+' . preg_quote($table, '/') . '\b/i', $schema)) {
         $errors[] = 'Missing schema table: ' . $table;
     }
@@ -87,7 +87,7 @@ if (!str_contains($callSource, 'SELECT id FROM conversations WHERE id = ? FOR UP
     $errors[] = 'Call creation must serialize per conversation';
 }
 $cleanupSource = (string)file_get_contents($root . '/database/cleanup.php');
-foreach (['phone_verification_codes', 'two_factor_challenges', 'call_signals'] as $expiredTable) {
+foreach (['two_factor_challenges', 'call_signals'] as $expiredTable) {
     if (!str_contains($cleanupSource, $expiredTable)) $errors[] = 'Cleanup missing expired records: ' . $expiredTable;
 }
 foreach (['messages/api/Controller.php', 'groups/api/Controller.php', 'channels/api/Controller.php', 'topics/validators/TopicValidator.php'] as $relative) {
@@ -109,8 +109,8 @@ $entrySource = (string)file_get_contents($root . '/public/index.php');
 if (!str_contains($entrySource, "'schema' => 'ready'") || !str_contains($entrySource, "'schema' => 'incomplete'")) {
     $errors[] = 'Health endpoint must distinguish a ready schema from an incomplete schema';
 }
-if (!str_contains($entrySource, "'sms_provider' => \$textbeeConfigured ? 'configured' : 'not_configured'")) {
-    $errors[] = 'Health endpoint must expose only a safe TextBee configuration status';
+if (!str_contains($entrySource, "'gif_provider' => \$giphyConfigured ? 'configured' : 'not_configured'")) {
+    $errors[] = 'Health endpoint must expose only a safe GIF provider configuration status';
 }
 
 $rateLimitedWrites = [
