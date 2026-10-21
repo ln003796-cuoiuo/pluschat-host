@@ -32,6 +32,7 @@ if (!$alreadyConfigured && ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
     $csrf = is_string($_POST['csrf'] ?? null) ? $_POST['csrf'] : '';
     $password = is_string($_POST['db_password'] ?? null) ? $_POST['db_password'] : '';
     $textbeeApiKey = trim(is_string($_POST['textbee_api_key'] ?? null) ? $_POST['textbee_api_key'] : (string)(getenv('PLUSCHAT_TEXTBEE_API_KEY') ?: ''));
+    $giphyApiKey = trim(is_string($_POST['giphy_api_key'] ?? null) ? $_POST['giphy_api_key'] : (string)(getenv('PLUSCHAT_GIPHY_API_KEY') ?: ''));
 
     if (!hash_equals((string)$_SESSION['pluschat_setup_csrf'], $csrf)) {
         $error = 'Сессия формы истекла. Обновите страницу и попробуйте снова.';
@@ -141,6 +142,7 @@ if (!$alreadyConfigured && ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
                 'db_password' => $password,
                 // Set privately by the hosting environment if configured. Never commit API keys.
                 'textbee_api_key' => $textbeeApiKey,
+                'giphy_api_key' => $giphyApiKey,
                 'textbee_device_id' => (string)(getenv('PLUSCHAT_TEXTBEE_DEVICE_ID') ?: '6ad27e0e10b63ade60583c87'),
                 'app_secret' => bin2hex(random_bytes(32)),
                 'mail_from' => 'register@плюсчат.рф',
@@ -159,7 +161,7 @@ if (!$alreadyConfigured && ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
             @chmod($configPath, 0600);
             $alreadyConfigured = true;
             $success = true;
-            unset($_POST['db_password'], $_POST['textbee_api_key']);
+            unset($_POST['db_password'], $_POST['textbee_api_key'], $_POST['giphy_api_key']);
             $_SESSION = [];
             session_regenerate_id(true);
         } catch (Throwable $e) {
@@ -202,7 +204,7 @@ button{width:100%;margin-top:16px;border:0;border-radius:12px;padding:15px;backg
   <?php else: ?>
     <div class="pill">ОДИН РАЗ · ЗАЩИЩЁННАЯ НАСТРОЙКА</div>
     <h1>Подключить базу данных</h1>
-    <p>Имя базы, пользователь и адрес сервера уже указаны. Введите пароль MySQL и ключ TextBee для обязательного подтверждения по SMS. Оба значения сохраняются только в закрытый файл конфигурации вне публичной папки; они не попадают в URL или GitHub.</p>
+    <p>Имя базы, пользователь и адрес сервера уже указаны. Введите пароль MySQL и ключ TextBee для обязательного подтверждения по SMS. Ключ GIPHY можно добавить сейчас или оставить пустым и настроить позже. Значения сохраняются только в закрытый файл конфигурации вне публичной папки; они не попадают в URL или GitHub.</p>
     <?php if ($requirements !== []): ?>
       <div class="notice error">Для работы сервера хостинг должен поддерживать: <?= htmlspecialchars(implode(', ', $requirements), ENT_QUOTES, 'UTF-8') ?>.</div>
     <?php endif; ?>
@@ -212,9 +214,11 @@ button{width:100%;margin-top:16px;border:0;border-radius:12px;padding:15px;backg
       <input id="db_password" name="db_password" type="password" required maxlength="1024" autocomplete="new-password" autofocus>
       <label for="textbee_api_key" style="margin-top:18px">API-ключ TextBee</label>
       <input id="textbee_api_key" name="textbee_api_key" type="password" required maxlength="512" autocomplete="new-password">
+      <label for="giphy_api_key" style="margin-top:18px">GIPHY API-ключ (необязательно)</label>
+      <input id="giphy_api_key" name="giphy_api_key" type="password" maxlength="512" autocomplete="new-password">
       <button type="submit">Проверить и настроить сервер</button>
     </form>
-    <div class="hint">Пароль БД и ключ SMS не выводятся на экран, не добавляются в URL и не сохраняются в GitHub. Настройка требует HTTPS.</div>
+    <div class="hint">Пароль БД и ключи API не выводятся на экран, не добавляются в URL и не сохраняются в GitHub. GIPHY можно настроить позже. Настройка требует HTTPS.</div>
     <?php if ($error !== ''): ?><div class="notice error"><?= htmlspecialchars($error, ENT_QUOTES, 'UTF-8') ?></div><?php endif; ?>
   <?php endif; ?>
   <?php if ($success): ?><div class="notice ok">Готово: подключение к MySQL проверено, таблицы созданы, настройки сохранены. Теперь можно проверить <strong>/api/v1/health</strong>.</div><?php endif; ?>
