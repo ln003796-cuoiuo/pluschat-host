@@ -4,7 +4,6 @@ declare(strict_types=1);
 require_once __DIR__ . '/../validators/RegistrationValidator.php';
 require_once __DIR__ . '/../repositories/RegistrationRepository.php';
 require_once __DIR__ . '/../mail/mailconfirm/Mailer.php';
-require_once __DIR__ . '/TextBeeService.php';
 
 final class PCRegistrationService
 {
@@ -21,13 +20,12 @@ final class PCRegistrationService
             // only after confirming email. This reserved internal value is never exposed.
             $user['username'] = 'pc_pending_' . bin2hex(random_bytes(8));
         }
-        if (PCRegistrationRepository::isTaken($pdo, $user['email'], $user['username'], $user['phone'])) {
+        if (PCRegistrationRepository::isTaken($pdo, $user['email'], $user['username'])) {
             return ['status' => 409, 'body' => ['ok' => false, 'error' => 'email_username_or_phone_taken', 'message' => 'Email, имя пользователя или номер уже используется.']];
         }
 
         $codes = PCRegistrationRepository::create($pdo, $user);
         $emailSent = PCVerificationMailer::send($user['email'], $user['first_name'], $codes['email_code']);
-        $smsSent = PCTextBeeService::send($user['phone'], 'Код подтверждения Pluschat: ' . $codes['phone_code'] . '. Действует 10 минут. Никому не сообщайте этот код.');
         return [
             'status' => 201,
             'body' => [
@@ -35,10 +33,9 @@ final class PCRegistrationService
                 'registered' => true,
                 'profile_completion_required' => str_starts_with($user['username'], 'pc_pending_'),
                 'email_verification_sent' => $emailSent,
-                'phone_verification_sent' => $smsSent,
-                'message' => $smsSent
-                    ? 'Аккаунт создан. Введи код из SMS, затем подтверди электронную почту.'
-                    : 'Аккаунт создан, но SMS не отправлено. Проверь ключ TextBee, подключённый телефон и лимит, затем запроси код повторно.',
+                'message' => $emailSent
+                    ? 'Аккаунт создан. Введи код подтверждения из электронной почты.'
+                    : 'Аккаунт создан, но письмо не отправлено. Проверь настройки почты и запроси код повторно.',
             ],
         ];
     }
