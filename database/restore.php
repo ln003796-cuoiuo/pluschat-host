@@ -20,7 +20,7 @@ $nonce = substr($raw, 6, $nonceLength);
 $compressed = sodium_crypto_aead_xchacha20poly1305_ietf_decrypt(substr($raw, 6 + $nonceLength), 'pluschat-backup-v1', $nonce, $key);
 $json = is_string($compressed) ? gzdecode($compressed) : false;
 $data = is_string($json) ? json_decode($json, true) : null;
-if (!is_array($data) || ($data['format'] ?? '') !== 'pluschat-logical-backup-v1' || !is_array($data['tables'] ?? null)) { fwrite(STDERR, "ERROR: Authentication failed or backup is invalid.\n"); exit(2); }
+if (!is_array($data) || ($data['format'] ?? '') !== 'pluschat-logical-backup-v1' || !is_array($data['tables'] ?? null) || !is_array($data['uploads'] ?? [])) { fwrite(STDERR, "ERROR: Authentication failed or backup is invalid.\n"); exit(2); }
 $pdo = pc_db();
 $currentDb = (string)$pdo->query('SELECT DATABASE()')->fetchColumn();
 if (!hash_equals((string)($data['database'] ?? ''), $currentDb)) { fwrite(STDERR, "ERROR: Backup database name does not match target database.\n"); exit(2); }
@@ -51,6 +51,29 @@ try {
         }
     }
     $pdo->commit();
+    $uploadDirectory = dirname(__DIR__) . '/storage/uploads';
+    if (!is_dir($uploadDirectory) && !mkdir($uploadDirectory, 0700, true) && !is_dir($uploadDirectory)) throw new RuntimeException('Cannot create upload storage directory');
+    $stagingDirectory = $uploadDirectory . '/.restore-' . bin2hex(random_bytes(6));
+    if (!mkdir($stagingDirectory, 0700, true)) throw new RuntimeException('Cannot stage restored uploads');
+    try {
+        foreach (($data['uploads'] ?? []) as $name => $encoded) {
+            if (!is_string($name) || !preg_match('/^[A-Za-z0-9._-]{1,255}$/', $name) || str_contains($name, '..') || !is_string($encoded)) throw new RuntimeException('Invalid upload item in backup');
+            $bytes = base64_decode($encoded, true);
+            if ($bytes === false) throw new RuntimeException('Invalid upload encoding in backup');
+            $target = $stagingDirectory . DIRECTORY_SEPARATOR . $name;
+            if (file_put_contents($target, $bytes, LOCK_EX) === false) throw new RuntimeException('Cannot stage upload ' . $name);
+            chmod($target, 0600);
+        }
+        foreach (glob($uploadDirectory . DIRECTORY_SEPARATOR . '*') ?: [] as $oldFile) {
+            if (is_file($oldFile) && !is_link($oldFile)) @unlink($oldFile);
+        }
+        foreach (glob($stagingDirectory . DIRECTORY_SEPARATOR . '*') ?: [] as $stagedFile) {
+            if (is_file($stagedFile) && !rename($stagedFile, $uploadDirectory . DIRECTORY_SEPARATOR . basename($stagedFile))) throw new RuntimeException('Could not install restored upload');
+        }
+    } finally {
+        foreach (glob($stagingDirectory . DIRECTORY_SEPARATOR . '*') ?: [] as $stagedFile) if (is_file($stagedFile)) @unlink($stagedFile);
+        @rmdir($stagingDirectory);
+    }
     $pdo->exec("CREATE TABLE IF NOT EXISTS backup_runs (id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY, backup_name VARCHAR(255) NOT NULL, sha256 CHAR(64) NOT NULL, byte_size BIGINT UNSIGNED NOT NULL, status ENUM('created','verified','failed','restored') NOT NULL, details VARCHAR(1000) NOT NULL DEFAULT '', created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, INDEX idx_backup_runs_created (created_at, status)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
     $pdo->prepare("INSERT INTO backup_runs (backup_name, sha256, byte_size, status, details) VALUES (?, ?, ?, 'restored', ?)")->execute([basename($file), hash_file('sha256', $file), filesize($file), 'Restored by CLI restore utility.']);
     echo "RESTORE_OK database=" . $currentDb . " tables=" . count($data['tables']) . PHP_EOL;
