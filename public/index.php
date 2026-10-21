@@ -65,7 +65,7 @@ function pc_require_verified_user(): array {
         pc_json(403, [
             'ok' => false,
             'error' => 'profile_completion_required',
-            'message' => 'Подтверди email и телефон, затем выбери ник и заверши профиль.',
+            'message' => 'Подтверди email, затем выбери ник и заверши профиль.',
         ]);
     }
     return $user;
@@ -86,7 +86,7 @@ try {
         $pdo = pc_db();
         $pdo->query('SELECT 1')->fetchColumn();
         $requiredTables = [
-            'users', 'email_verification_tokens', 'phone_verification_codes', 'auth_tokens', 'conversations',
+            'users', 'email_verification_tokens', 'auth_tokens', 'conversations',
             'conversation_members', 'messages', 'user_settings', 'user_devices',
             'user_blocks', 'chat_groups', 'group_members', 'channels',
             'channel_members', 'topics', 'topic_messages', 'message_attachments',
@@ -113,8 +113,6 @@ try {
                 'missing_table_count' => count($missing),
             ]);
         }
-        $textbeeConfigured = trim((string)pc_config('textbee_api_key', '') ?: (string)(getenv('PLUSCHAT_TEXTBEE_API_KEY') ?: '')) !== ''
-            && trim((string)pc_config('textbee_device_id', '') ?: (string)(getenv('PLUSCHAT_TEXTBEE_DEVICE_ID') ?: '')) !== '';
         $giphyConfigured = trim((string)pc_config('giphy_api_key', '') ?: (string)(getenv('PLUSCHAT_GIPHY_API_KEY') ?: '')) !== '';
         pc_json(200, [
             'ok' => true,
@@ -122,7 +120,6 @@ try {
             'api_version' => 1,
             'database' => 'connected',
             'schema' => 'ready',
-            'sms_provider' => $textbeeConfigured ? 'configured' : 'not_configured',
             'gif_provider' => $giphyConfigured ? 'configured' : 'not_configured',
         ]);
     }
