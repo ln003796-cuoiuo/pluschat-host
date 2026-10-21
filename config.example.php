@@ -12,6 +12,8 @@ return [
     'db_password' => '',
     'mail_from' => 'register@плюсчат.рф',
     'giphy_api_key' => '',
+    'backup_encryption_key' => '',
+    'backup_directory' => dirname(__DIR__) . '/../pluschat-private-backups',
     'app_base_url' => 'https://xn--80avljg2a1c.xn--p1ai',
     'allowed_origins' => [
         'https://xn--80avljg2a1c.xn--p1ai',
