@@ -94,6 +94,8 @@ try {
             'notifications', 'group_messages', 'channel_posts', 'api_rate_limits',
             'user_crypto_keys', 'friend_requests', 'friendships', 'saved_messages', 'polls', 'poll_options', 'poll_votes', 'chat_preferences', 'chat_folders', 'chat_folder_items', 'stories', 'story_views', 'password_reset_tokens', 'message_hidden', 'user_two_factor', 'two_factor_setups', 'two_factor_challenges', 'user_avatars',
         'calls', 'call_participants', 'call_signals',
+            'user_crypto_prekeys', 'conversation_key_epochs', 'conversation_key_envelopes',
+            'channel_key_epochs', 'channel_key_envelopes', 'backup_runs', 'message_media_metadata',
         ];
         $stmt = $pdo->prepare(
             'SELECT COUNT(*) FROM information_schema.tables
