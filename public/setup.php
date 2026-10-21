@@ -139,7 +139,7 @@ if (!$alreadyConfigured && ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
                 'db_password' => $password,
                 // Provider keys and backup secrets are configured privately after setup.
                 'giphy_api_key' => $giphyApiKey,
-                'backup_encryption_key' => '',
+                'backup_encryption_key' => bin2hex(random_bytes(32)),
                 'backup_directory' => dirname(__DIR__) . '/../pluschat-private-backups',
                 'app_secret' => bin2hex(random_bytes(32)),
                 'mail_from' => 'register@плюсчат.рф',
