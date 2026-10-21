@@ -49,6 +49,7 @@ final class PCAttachmentService
                     'id' => $id, 'message_id' => (string)$messageId,
                     'original_name' => $meta['original_name'], 'mime_type' => $meta['mime_type'],
                     'byte_size' => $meta['size'], 'sha256' => $sha, 'encrypted' => true,
+                    'media_kind' => $meta['media_kind'], 'duration_ms' => $meta['duration_ms'],
                     'download_url' => '/api/v1/attachments/' . $id,
                 ],
             ],
