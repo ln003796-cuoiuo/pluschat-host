@@ -38,6 +38,10 @@ if (!is_string($compressed)) { fwrite(STDERR, "ERROR: Compression failed.\n"); e
 $key = hash('sha256', $secret, true);
 $nonce = random_bytes(SODIUM_CRYPTO_AEAD_XCHACHA20POLY1305_IETF_NPUBBYTES);
 $ciphertext = sodium_crypto_aead_xchacha20poly1305_ietf_encrypt($compressed, 'pluschat-backup-v1', $nonce, $key);
+$verified = sodium_crypto_aead_xchacha20poly1305_ietf_decrypt($ciphertext, 'pluschat-backup-v1', $nonce, $key);
+if (!is_string($verified) || !hash_equals(hash('sha256', $compressed), hash('sha256', $verified))) {
+    fwrite(STDERR, "ERROR: Backup encryption verification failed.\\n"); exit(2);
+}
 $filename = 'pluschat-' . gmdate('Ymd-His') . '-' . bin2hex(random_bytes(4)) . '.pcbak';
 $target = rtrim($directory, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . $filename;
 $temp = $target . '.tmp';
@@ -48,7 +52,7 @@ if (file_put_contents($temp, "PCBAK1" . $nonce . $ciphertext, LOCK_EX) === false
 $sha = hash_file('sha256', $target);
 try {
     $pdo->exec("CREATE TABLE IF NOT EXISTS backup_runs (id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY, backup_name VARCHAR(255) NOT NULL, sha256 CHAR(64) NOT NULL, byte_size BIGINT UNSIGNED NOT NULL, status ENUM('created','verified','failed','restored') NOT NULL, details VARCHAR(1000) NOT NULL DEFAULT '', created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, INDEX idx_backup_runs_created (created_at, status)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
-    $pdo->prepare("INSERT INTO backup_runs (backup_name, sha256, byte_size, status, details) VALUES (?, ?, ?, 'created', ?)")->execute([$filename, $sha, filesize($target), 'Authenticated encrypted logical snapshot; schema restored separately from versioned migrations.']);
+    $pdo->prepare("INSERT INTO backup_runs (backup_name, sha256, byte_size, status, details) VALUES (?, ?, ?, 'verified', ?)")->execute([$filename, $sha, filesize($target), 'Authenticated encrypted logical snapshot; schema restored separately from versioned migrations.']);
 } catch (Throwable $e) { fwrite(STDERR, "WARNING: Backup exists but audit row could not be saved.\n"); }
 foreach (glob(rtrim($directory, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . 'pluschat-*.pcbak') ?: [] as $old) {
     if (is_file($old) && filemtime($old) < time() - 90 * 86400) @unlink($old);
