@@ -20,6 +20,20 @@ final class PCDeviceService
         return ['status' => 200, 'body' => ['ok' => true, 'revoked_sessions' => $count]];
     }
 
+    public static function revokeAllSessions(int $userId): array
+    {
+        $count = PCDeviceRepository::revokeAllSessions(pc_db(), $userId);
+        return [
+            'status' => 200,
+            'body' => [
+                'ok' => true,
+                'revoked_sessions' => $count,
+                'logged_out_everywhere' => true,
+                'message' => 'Все сеансы завершены. Для продолжения войдите снова.',
+            ],
+        ];
+    }
+
     public static function revokeDevice(int $userId, int $deviceId): array
     {
         if (!PCDeviceValidator::validId($deviceId)) {
