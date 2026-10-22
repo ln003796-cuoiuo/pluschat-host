@@ -293,6 +293,13 @@ function pc_security_dispatch(string $path, string $method): bool
         pc_json($result['status'], $result['body']);
     }
 
+    if ($path === '/api/v1/auth/sessions/revoke-all' && $method === 'POST') {
+        // Authenticate before revoking: this intentionally invalidates the current token too.
+        $user = pc_require_verified_user();
+        $result = PCDeviceService::revokeAllSessions((int)$user['id']);
+        pc_json($result['status'], $result['body']);
+    }
+
     if (preg_match('#^/api/v1/devices/([0-9]+)/revoke$#', $path, $matches) && $method === 'POST') {
         $user = pc_require_verified_user();
         $result = PCDeviceService::revokeDevice((int)$user['id'], (int)$matches[1]);
