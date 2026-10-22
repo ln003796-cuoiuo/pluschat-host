@@ -34,6 +34,7 @@ $requiredFiles = [
     'database/backup.php',
     'database/restore.php',
     'database/migrations/010_encrypted_media_keys_backups.sql',
+    'database/migrations/010_message_pins.sql',
     'docs/SECURITY_MEDIA_BACKUPS.md',
     'register/api/Controller.php',
     'register/services/RegistrationService.php',
@@ -80,7 +81,7 @@ foreach (glob($root . '/database/migrations/*.sql') ?: [] as $migrationPath) {
     $migrationSql .= "\n" . (string)file_get_contents($migrationPath);
 }
 $allSchemaSql = $schema . "\n" . $migrationSql;
-foreach (['users', 'auth_tokens', 'conversations', 'messages', 'chat_groups', 'channels', 'topics', 'message_attachments', 'notifications', 'reports', 'user_crypto_keys', 'calls', 'call_participants', 'call_signals', 'user_one_time_prekeys', 'encrypted_key_envelopes', 'backup_runs'] as $table) {
+foreach (['users', 'auth_tokens', 'conversations', 'messages', 'chat_groups', 'channels', 'topics', 'message_attachments', 'notifications', 'reports', 'user_crypto_keys', 'calls', 'call_participants', 'call_signals', 'user_one_time_prekeys', 'encrypted_key_envelopes', 'backup_runs', 'message_pins'] as $table) {
     if (!preg_match('/CREATE\\s+TABLE\\s+IF\\s+NOT\\s+EXISTS\\s+' . preg_quote($table, '/') . '\\b/i', $allSchemaSql)) {
         $errors[] = 'Missing schema/migration table: ' . $table;
     }
@@ -107,6 +108,11 @@ foreach (['messages/api/Controller.php', 'groups/api/Controller.php', 'channels/
 foreach (['security/api/Controller.php'] as $relative) {
     $source = (string)file_get_contents($root . '/' . $relative);
     if ($source === '') $errors[] = 'Empty security module: ' . $relative;
+}
+
+$messageSource = (string)file_get_contents($root . '/messages/api/Controller.php');
+if (!str_contains($messageSource, '/api/v1/messages/([0-9]+)/pin') || !str_contains($messageSource, '/api/v1/conversations/([0-9]+)/pins')) {
+    $errors[] = 'Message pin API routes are missing';
 }
 
 $securitySource = (string)file_get_contents($root . '/security/api/Controller.php');
