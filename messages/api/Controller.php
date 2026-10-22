@@ -131,5 +131,42 @@ function pc_messages_dispatch(string $path, string $method): bool
         pc_json($result['status'], $result['body']);
     }
 
+
+    if (preg_match('#^/api/v1/conversations/([0-9]+)/pins$#', $path, $matches) && $method === 'GET') {
+        $user = pc_require_verified_user();
+        $conversationId = (int)$matches[1];
+        $member = pc_db()->prepare('SELECT 1 FROM conversation_members WHERE conversation_id = ? AND user_id = ? LIMIT 1');
+        $member->execute([$conversationId, $user['id']]);
+        if (!$member->fetchColumn()) pc_json(404, ['ok' => false, 'error' => 'conversation_not_found']);
+        $stmt = pc_db()->prepare('SELECT m.id, m.sender_id, m.body, m.encryption_version, m.created_at, m.edited_at, p.pinned_by, p.pinned_at FROM message_pins p JOIN messages m ON m.id = p.message_id WHERE p.conversation_id = ? AND m.body_encrypted = 1 ORDER BY p.pinned_at DESC LIMIT 100');
+        $stmt->execute([$conversationId]);
+        pc_json(200, ['ok' => true, 'pins' => array_map(static fn(array $m): array => [
+            'id' => (string)$m['id'], 'sender_id' => (string)$m['sender_id'], 'body' => $m['body'],
+            'encrypted' => true, 'encryption_version' => $m['encryption_version'],
+            'created_at' => $m['created_at'], 'edited_at' => $m['edited_at'],
+            'pinned_by' => (string)$m['pinned_by'], 'pinned_at' => $m['pinned_at'],
+        ], $stmt->fetchAll())]);
+    }
+
+    if (preg_match('#^/api/v1/messages/([0-9]+)/pin$#', $path, $matches) && $method === 'POST') {
+        $user = pc_require_verified_user();
+        $data = pc_input();
+        $pinned = $data['pinned'] ?? true;
+        if (!is_bool($pinned)) pc_json(422, ['ok' => false, 'error' => 'invalid_pin_state']);
+        $messageId = (int)$matches[1];
+        $stmt = pc_db()->prepare('SELECT m.conversation_id FROM messages m JOIN conversation_members cm ON cm.conversation_id = m.conversation_id AND cm.user_id = ? WHERE m.id = ? AND m.body_encrypted = 1 LIMIT 1');
+        $stmt->execute([$user['id'], $messageId]);
+        $conversationId = $stmt->fetchColumn();
+        if (!$conversationId) pc_json(404, ['ok' => false, 'error' => 'message_not_found']);
+        if ($pinned) {
+            pc_db()->prepare('INSERT INTO message_pins (conversation_id, message_id, pinned_by) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE pinned_by = VALUES(pinned_by), pinned_at = UTC_TIMESTAMP()')
+                ->execute([(int)$conversationId, $messageId, (int)$user['id']]);
+        } else {
+            pc_db()->prepare('DELETE FROM message_pins WHERE conversation_id = ? AND message_id = ?')
+                ->execute([(int)$conversationId, $messageId]);
+        }
+        pc_json(200, ['ok' => true, 'message_id' => (string)$messageId, 'pinned' => $pinned]);
+    }
+
     return false;
 }
