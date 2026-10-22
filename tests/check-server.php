@@ -106,6 +106,13 @@ foreach (['security/api/Controller.php'] as $relative) {
 }
 
 $securitySource = (string)file_get_contents($root . '/security/api/Controller.php');
+$deviceRepositorySource = (string)file_get_contents($root . '/security/repositories/DeviceRepository.php');
+$deviceServiceSource = (string)file_get_contents($root . '/security/services/DeviceService.php');
+if (!str_contains($securitySource, '/api/v1/auth/sessions/revoke-all')
+    || !str_contains($deviceRepositorySource, 'function revokeAllSessions')
+    || !str_contains($deviceServiceSource, 'function revokeAllSessions')) {
+    $errors[] = 'Revoke-all-sessions endpoint is incomplete';
+}
 foreach (['/api/v1/security/one-time-prekeys', '/api/v1/security/one-time-prekey/', '/api/v1/security/key-envelopes'] as $keyRoute) {
     if (!str_contains($securitySource, $keyRoute)) $errors[] = 'Key exchange endpoint missing: ' . $keyRoute;
 }
