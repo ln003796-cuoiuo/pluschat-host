@@ -17,6 +17,23 @@ final class PCDeviceRepository
         return $stmt->rowCount();
     }
 
+    public static function revokeAllSessions(PDO $pdo, int $userId): int
+    {
+        $pdo->beginTransaction();
+        try {
+            $stmt = $pdo->prepare('SELECT COUNT(*) FROM auth_tokens WHERE user_id = ?');
+            $stmt->execute([$userId]);
+            $count = (int)$stmt->fetchColumn();
+            $pdo->prepare('DELETE FROM auth_tokens WHERE user_id = ?')->execute([$userId]);
+            $pdo->prepare('UPDATE user_devices SET revoked_at = UTC_TIMESTAMP() WHERE user_id = ? AND revoked_at IS NULL')->execute([$userId]);
+            $pdo->commit();
+            return $count;
+        } catch (Throwable $e) {
+            if ($pdo->inTransaction()) $pdo->rollBack();
+            throw $e;
+        }
+    }
+
     public static function revokeDevice(PDO $pdo, int $userId, int $deviceId): bool
     {
         $stmt = $pdo->prepare('SELECT device_key_hash FROM user_devices WHERE id = ? AND user_id = ? AND revoked_at IS NULL LIMIT 1');
